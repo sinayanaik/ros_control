@@ -2,6 +2,7 @@
 <robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="cylindrical_3dof_robot">
 
   <!-- Link Parameters -->
+   <!-- changes the dimentions -->
   <xacro:property name="r1" value="0.01"/>
   <xacro:property name="r2" value="0.01"/>
   <xacro:property name="r3" value="0.01"/>
