@@ -1,12 +1,7 @@
 <?xml version="1.0"?>
 <robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="3dof_robot">
-  <xacro:include filename="$(find robot_description)/urdf/robot_materials.xacro"/>
 
   <xacro:include filename="$(find robot_description)/urdf/robot_gazebo.xacro"/>
-  <xacro:red_material/>
-  <xacro:blue_material/>
-  <xacro:green_material/>
-  <xacro:gray_material/>
   <xacro:include filename="$(find robot_description)/urdf/robot_control.xacro"/>
   <xacro:include filename="$(find robot_description)/urdf/robot_materials.xacro"/>
 
@@ -49,7 +44,7 @@
         <geometry>
           <cylinder radius="${radius}" length="${length}"/>
         </geometry>
-        <material name="gray_material"/>
+        <material><color rgba="${color}"/></material>
       </visual>
       <collision>
         <origin xyz="0 0 ${length/2}" rpy="0 0 0"/>
@@ -106,7 +101,7 @@
     <visual>
       <origin xyz="0.015 0 0.025" rpy="0 0 0"/>
       <geometry><box size="0.01 0.01 0.05"/></geometry>
-      <material name="gray_material"/>
+      <material><color rgba="0.2 0.2 0.2 1.0"/></material>
     </visual>
     <collision>
       <origin xyz="0.015 0 0.025" rpy="0 0 0"/>
@@ -136,11 +131,10 @@
     </inertial>
   </link>
 
-  <joint name="link_4_to_gripper" type="revolute">
+  <joint name="link_4_to_gripper" type="fixed">
     <parent link="link_4"/>
     <child link="gripper_base"/>
     <origin xyz="0 0 ${l4}" rpy="0 0 0"/>
-    <limit lower="-1.57" upper="1.57" effort="50" velocity="1.0"/>
   </joint>
 
 </robot>

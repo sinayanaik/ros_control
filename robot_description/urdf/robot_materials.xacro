@@ -1,0 +1,32 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="3dof_robot">
+
+  <!-- Macro to define red material -->
+  <xacro:macro name="red_material" params="">
+    <material name="red_material">
+      <color rgba="0.8 0.1 0.1 1.0"/>
+    </material>
+  </xacro:macro>
+
+  <!-- Macro to define blue material -->
+  <xacro:macro name="blue_material" params="">
+    <material name="blue_material">
+      <color rgba="0.1 0.1 0.8 1.0"/>
+    </material>
+  </xacro:macro>
+
+  <!-- Macro to define green material -->
+  <xacro:macro name="green_material" params="">
+    <material name="green_material">
+      <color rgba="0.1 0.8 0.1 1.0"/>
+    </material>
+  </xacro:macro>
+
+  <!-- Macro to define gray material -->
+  <xacro:macro name="gray_material" params="">
+    <material name="gray_material">
+      <color rgba="0.5 0.5 0.5 1.0"/>
+    </material>
+  </xacro:macro>
+
+</robot>
