@@ -1,8 +1,10 @@
 <?xml version="1.0"?>
-<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="cylindrical_3dof_robot">
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="3dof_robot">
 
+  <xacro:include filename="$(find robot_description)/urdf/robot_gazebo.xacro"/>
+  <xacro:include filename="$(find robot_description)/urdf/robot_control.xacro"/>
+  
   <!-- Link Parameters -->
-   <!-- changes the dimentions like mass and length -->
   <xacro:property name="r1" value="0.01"/>
   <xacro:property name="r2" value="0.01"/>
   <xacro:property name="r3" value="0.01"/>
