@@ -13,8 +13,8 @@ from launch.event_handlers import OnProcessExit
 def generate_launch_description():
     # Load controllers configuration
     controller_config = os.path.join(
-        get_package_share_directory("robot_controller"),
-        "config",
+                get_package_share_directory("robot_controller"),
+                "config",
         "robot_controllers.yaml"
     )
 
@@ -33,8 +33,8 @@ def generate_launch_description():
             target_action=joint_state_broadcaster_spawner,
             on_exit=[
                 Node(
-                    package="controller_manager",
-                    executable="spawner",
+        package="controller_manager",
+        executable="spawner",
                     arguments=["arm_controller", "gripper_controller"],
                     output="screen",
                     parameters=[controller_config],
@@ -44,6 +44,6 @@ def generate_launch_description():
     )
 
     return LaunchDescription([
-        joint_state_broadcaster_spawner,
+            joint_state_broadcaster_spawner,
         delayed_controller_spawner,
     ])
