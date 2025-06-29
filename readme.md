@@ -63,13 +63,15 @@ ros2 launch robot_description robot.launch.py
 - The `trajectory_effort_publisher.py` node publishes a red sphere marker at the end effector (gripper) position in real time.
 - Each marker is visible for 5 seconds, creating a fading trail that shows the recent path of the end effector.
 - This allows you to visually track the trajectory followed by the robot's gripper in RViz.
-- To see the trail:
+- **New:** When you stop the node with Ctrl+C, it will automatically plot the joint data and the 3D end effector trajectory from the most recent CSV file—no need to run a separate plotting command.
+- To see the trail and plot:
   1. Launch the simulation and RViz as above.
   2. Run the trajectory publisher:
      ```bash
      ros2 run robot_motion trajectory_effort_publisher.py
      ```
   3. In RViz, add a Marker display for `/gripper_position_marker` if not already present.
+  4. When you press Ctrl+C to stop the node, the plots will appear automatically.
 
 - The marker trail will update in real time as the robot moves, with each marker fading out after 5 seconds.
 
@@ -88,10 +90,11 @@ ros2 launch robot_description robot.launch.py
      ```bash
      ros2 run robot_motion trajectory_publisher.py
      ```
-   - Effort-based (with marker trail):
+   - Effort-based (with marker trail and auto-plotting):
      ```bash
      ros2 run robot_motion trajectory_effort_publisher.py
      ```
+     - **After you press Ctrl+C, the joint and 3D end effector plots will be shown automatically.**
 
 4. In RViz, ensure the Marker display for `/gripper_position_marker` is enabled to see the end effector path trail.
 
