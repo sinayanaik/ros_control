@@ -15,19 +15,85 @@ A comprehensive ROS 2 project implementing a 3-DOF robot arm with a gripper, fea
 - Data visualization and plotting
 - Comprehensive controller configurations
 
-## Robot Specifications
+## Robot Structure
 
-- **Arm Structure:**
-  - Base Link: 25 cm length, 2.4 cm radius
-  - Middle Link: 15 cm length, 2.0 cm radius
-  - End Link: 15 cm length, 2.0 cm radius
-  - Gripper: 10 cm length, 1.5 cm radius
+- **Links:**
+  - base_link
+  - link_1
+  - link_2
+  - link_3
+  - gripper_base
+  - gripper_left_finger
+  - gripper_right_finger
 
-- **Joint Configuration:**
-  - All joints: ±90 degrees range (±1.57 radians)
-  - Multiple control interfaces: position, velocity, effort
-  - 1000 Hz control rate
-  - Real-time state feedback
+- **Joints:**
+  - link_1_to_link_2
+  - link_2_to_link_3
+  - link_3_to_link_4
+  - link_4_to_gripper
+  - gripper_left_finger_joint
+  - gripper_right_finger_joint
+
+- **Joint Connections:**
+
+| Joint Name                 | Connects From   | Connects To           | Description      |
+|---------------------------|-----------------|-----------------------|------------------|
+| link_1_to_link_2          | link_1          | link_2                | base rotation    |
+| link_2_to_link_3          | link_2          | link_3                | shoulder         |
+| link_3_to_link_4          | link_3          | gripper_base          | elbow            |
+| link_4_to_gripper         | gripper_base    | gripper               | wrist            |
+| gripper_left_finger_joint | gripper_base    | gripper_left_finger   | left finger      |
+| gripper_right_finger_joint| gripper_base    | gripper_right_finger  | right finger     |
+
+## RViz and Gazebo Integration
+
+- The project now uses a single launch file to start both Gazebo and RViz together:
+
+```bash
+ros2 launch robot_description robot.launch.py
+```
+
+- This launch file:
+  - Starts the Gazebo simulation with the robot model
+  - Launches RViz with the provided configuration
+  - Ensures only one robot_state_publisher is running
+
+## End Effector Path Visualization in RViz
+
+- The `trajectory_effort_publisher.py` node publishes a red sphere marker at the end effector (gripper) position in real time.
+- Each marker is visible for 5 seconds, creating a fading trail that shows the recent path of the end effector.
+- This allows you to visually track the trajectory followed by the robot's gripper in RViz.
+- To see the trail:
+  1. Launch the simulation and RViz as above.
+  2. Run the trajectory publisher:
+     ```bash
+     ros2 run robot_motion trajectory_effort_publisher.py
+     ```
+  3. In RViz, add a Marker display for `/gripper_position_marker` if not already present.
+
+- The marker trail will update in real time as the robot moves, with each marker fading out after 5 seconds.
+
+## Usage (Updated)
+
+1. Launch Gazebo and RViz together:
+   ```bash
+   ros2 launch robot_description robot.launch.py
+   ```
+2. Start the controllers:
+   ```bash
+   ros2 launch robot_controller controllers.launch.py
+   ```
+3. Run the desired trajectory publisher:
+   - Position-based:
+     ```bash
+     ros2 run robot_motion trajectory_publisher.py
+     ```
+   - Effort-based (with marker trail):
+     ```bash
+     ros2 run robot_motion trajectory_effort_publisher.py
+     ```
+
+4. In RViz, ensure the Marker display for `/gripper_position_marker` is enabled to see the end effector path trail.
 
 ## Controller Selection Guide
 
@@ -380,23 +446,65 @@ arm_controller:
 - **Features**: Sinusoidal motion patterns
 
 ### 2. trajectory_effort_publisher.py
-**Purpose**: Effort-based trajectory generation with data logging
+**Purpose**: Effort-based trajectory generation with data logging and cartesian coordinate tracking
 - **Update Rate**: 10 Hz
 - **Message Type**: Float64MultiArray
 - **Control Mode**: Effort-only
 - **Features**: 
   - Real-time effort feedback
-  - CSV data logging
+  - CSV data logging with cartesian coordinates
   - Sinusoidal effort patterns
+  - TF2-based cartesian position tracking
+  - RViz marker visualization
+  - 3D trajectory plotting
+
+**Cartesian Tracking Features**:
+- Tracks `link4_to_gripper` joint position in 3D space
+- Publishes red sphere marker in RViz showing gripper position
+- Logs cartesian coordinates (X, Y, Z) to CSV alongside joint data
+- Real-time position updates at 10 Hz
+- Transform from `base_link` to `gripper_base` frame
 
 ### 3. plot_joint_data.py
-**Purpose**: Data visualization and analysis
+**Purpose**: Data visualization and analysis with cartesian trajectory plotting
 - **Input**: CSV files from trajectory_effort_publisher.py
-- **Output**: PNG plots with position, velocity, effort data
+- **Output**: PNG plots with position, velocity, effort data and 3D cartesian trajectory
 - **Features**:
-  - Multi-subplot visualization
-  - Time-series analysis
+  - Multi-subplot visualization (2x2 grid)
+  - Time-series analysis for joint states
+  - 3D cartesian trajectory visualization
+  - Start/end point marking on trajectory
   - Joint-specific data display
+  - Automatic detection of cartesian data availability
+
+## Cartesian Visualization
+
+### RViz Marker Visualization
+The `trajectory_effort_publisher.py` automatically publishes a red sphere marker showing the current position of the gripper in 3D space.
+
+**To visualize in RViz**:
+1. Launch RViz:
+```bash
+ros2 launch robot_description rviz.launch.py
+```
+
+2. Add the marker display:
+   - In RViz, click "Add" → "By topic" → "/gripper_position_marker"
+   - The red sphere will show the real-time gripper position
+   - The marker updates at 10 Hz during trajectory execution
+
+### 3D Trajectory Plotting
+The enhanced `plot_joint_data.py` script creates comprehensive visualizations including:
+
+1. **Joint State Plots**: Position, velocity, and effort for each joint
+2. **3D Cartesian Trajectory**: Complete path of the gripper in 3D space
+3. **Start/End Markers**: Green circle (start) and red square (end) on trajectory
+
+**Features**:
+- Automatic detection of cartesian data in CSV files
+- 2x2 subplot layout for comprehensive view
+- High-resolution output (300 DPI)
+- Interactive 3D trajectory visualization
 
 ## Prerequisites
 
@@ -409,9 +517,14 @@ arm_controller:
   - gz_ros2_control
   - trajectory_msgs
   - rclpy
+  - tf2_ros
+  - tf2_ros_py
+  - visualization_msgs
+  - geometry_msgs
 - Python packages:
   - pandas
   - matplotlib
+  - numpy
 
 ## Installation
 
@@ -471,47 +584,68 @@ ros2 launch robot_controller controllers.launch.py
 ros2 topic echo /joint_states
 ```
 
-5. Visualize recorded data:
+5. Visualize robot in RViz (optional):
+```bash
+ros2 launch robot_description rviz.launch.py
+```
+Then add the gripper position marker: "Add" → "By topic" → "/gripper_position_marker"
+
+6. Visualize recorded data with cartesian trajectory:
 ```bash
 ros2 run robot_motion plot_joint_data.py joint_data/joint_states_YYYYMMDD_HHMMSS.csv
 ```
 
+**Enhanced Plot Features**:
+- 2x2 subplot layout showing joint states and 3D trajectory
+- Interactive 3D cartesian trajectory visualization
+- Start (green circle) and end (red square) markers
+- High-resolution output suitable for publications
+
 ### Controller Management
 
-6. List active controllers:
+7. List active controllers:
 ```bash
 ros2 control list_controllers
 ```
 
-7. Switch controller types:
+8. Switch controller types:
 ```bash
 ros2 control switch_controllers --start <controller_name> --stop <controller_name>
 ```
 
 ### Individual Control Commands (with Joint Trajectory Controller)
 
-8. Send position commands:
+9. Send position commands:
 ```bash
 ros2 topic pub /arm_controller/commands std_msgs/msg/Float64MultiArray "data: [0.5, 0.3, 0.2]"
 ```
 
-9. Send velocity commands:
+10. Send velocity commands:
 ```bash
 ros2 topic pub /arm_controller/commands std_msgs/msg/Float64MultiArray "data: [0.1, 0.05, 0.02]"
 ```
 
-10. Send effort commands:
+11. Send effort commands:
 ```bash
 ros2 topic pub /arm_controller/commands std_msgs/msg/Float64MultiArray "data: [2.0, 1.5, 1.0]"
 ```
 
 ## Data Logging
 
-The system automatically logs joint states to CSV files in the `joint_data/` directory. Each file contains:
+The system automatically logs joint states and cartesian coordinates to CSV files in the `joint_data/` directory. Each file contains:
 - Timestamp (seconds from start)
 - Position data for each joint (radians)
 - Velocity data for each joint (rad/s)
 - Effort data for each joint (Nm)
+- Cartesian coordinates of gripper (X, Y, Z in meters)
+
+**CSV Column Structure**:
+```
+timestamp, link_1_to_link_2_position, link_1_to_link_2_velocity, link_1_to_link_2_effort,
+          link_2_to_link_3_position, link_2_to_link_3_velocity, link_2_to_link_3_effort,
+          link_3_to_link_4_position, link_3_to_link_4_velocity, link_3_to_link_4_effort,
+          gripper_x, gripper_y, gripper_z
+```
 
 File naming convention: `joint_states_YYYYMMDD_HHMMSS.csv`
 
