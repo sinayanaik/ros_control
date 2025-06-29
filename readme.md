@@ -58,34 +58,25 @@ ros2 launch robot_description robot.launch.py
   - Launches RViz with the provided configuration
   - Ensures only one robot_state_publisher is running
 
-## End Effector Path Visualization in RViz
+## End Effector Path Visualization and Data Logging
 
-- The `trajectory_effort_publisher.py` node publishes a red sphere marker at the end effector (gripper) position in real time.
-- Each marker is visible for 5 seconds, creating a fading trail that shows the recent path of the end effector.
-- This allows you to visually track the trajectory followed by the robot's gripper in RViz.
-- **New:** When you stop the node with Ctrl+C, it will automatically plot the joint data and the 3D end effector trajectory from the most recent CSV file—no need to run a separate plotting command.
-- To see the trail and plot:
-  1. Launch the simulation and RViz as above.
-  2. Run the trajectory publisher:
-     ```bash
-     ros2 run robot_motion trajectory_effort_publisher.py
-     ```
-  3. In RViz, add a Marker display for `/gripper_position_marker` if not already present.
-  4. When you press Ctrl+C to stop the node, the plots will appear automatically.
+- The `trajectory_effort_publisher.py` node publishes a red sphere marker at the gripper in RViz, creating a fading trail (5 seconds) that shows the recent path of the end effector.
+- When you stop the node with Ctrl+C, it automatically saves joint and gripper data to a CSV in the `joint_data/` directory at the workspace root, and pops up two plots:
+  - Joint state plot (positions, velocities, efforts)
+  - 3D gripper trajectory plot
+- No separate plotting command is needed.
 
-- The marker trail will update in real time as the robot moves, with each marker fading out after 5 seconds.
+## Usage
 
-## Usage (Updated)
-
-1. Launch Gazebo and RViz together:
+1. **Launch simulation and RViz:**
    ```bash
    ros2 launch robot_description robot.launch.py
    ```
-2. Start the controllers:
+2. **Start controllers:**
    ```bash
    ros2 launch robot_controller controllers.launch.py
    ```
-3. Run the desired trajectory publisher:
+3. **Run trajectory publisher:**
    - Position-based:
      ```bash
      ros2 run robot_motion trajectory_publisher.py
@@ -94,9 +85,13 @@ ros2 launch robot_description robot.launch.py
      ```bash
      ros2 run robot_motion trajectory_effort_publisher.py
      ```
-     - **After you press Ctrl+C, the joint and 3D end effector plots will be shown automatically.**
+   - Press Ctrl+C to stop and see the plots.
+4. **In RViz:**
+   - Add a Marker display for `/gripper_position_marker` if not already present to see the end effector path trail.
 
-4. In RViz, ensure the Marker display for `/gripper_position_marker` is enabled to see the end effector path trail.
+## Data Output
+- CSV and plot files are saved in the top-level `joint_data/` directory in your workspace.
+- Plots include joint states and the 3D gripper trajectory.
 
 ## Controller Selection Guide
 
