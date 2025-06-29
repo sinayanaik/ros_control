@@ -29,6 +29,99 @@ A comprehensive ROS 2 project implementing a 3-DOF robot arm with a gripper, fea
   - 1000 Hz control rate
   - Real-time state feedback
 
+## Controller Selection Guide
+
+### For Individual Position, Velocity, and Effort Control
+
+**Recommended Approach: Joint Trajectory Controller**
+
+When you need to control position, velocity, and effort individually, the **Joint Trajectory Controller** is the recommended choice over using separate individual controllers.
+
+#### Why Joint Trajectory Controller is Better:
+
+1. **Unified Interface**: One controller handles all three control modes
+2. **Flexibility**: Switch between control modes without changing controllers
+3. **Professional Grade**: Industry-standard approach
+4. **MoveIt2 Compatibility**: Works with motion planning frameworks
+5. **Trajectory Support**: Handles complex multi-point trajectories
+6. **Online Switching**: Change control modes during operation
+7. **Resource Efficiency**: Single controller vs. three separate ones
+
+#### Recommended Configuration:
+
+```yaml
+arm_controller:
+  type: joint_trajectory_controller/JointTrajectoryController
+  ros__parameters:
+    joints:
+      - link_1_to_link_2
+      - link_2_to_link_3
+      - link_3_to_link_4
+    
+    # Support all control interfaces
+    command_interfaces:
+      - position
+      - velocity
+      - effort
+    
+    # Get feedback from all interfaces
+    state_interfaces:
+      - position
+      - velocity
+      - effort
+    
+    # Controller parameters
+    state_publish_rate: 50.0
+    action_monitor_rate: 20.0
+    allow_partial_joints_goal: true
+    constraints:
+      stopped_velocity_tolerance: 0.01
+      goal_time: 0.0
+```
+
+#### Usage Examples:
+
+1. **Position Control**:
+   ```bash
+   ros2 topic pub /arm_controller/commands std_msgs/msg/Float64MultiArray "data: [0.5, 0.3, 0.2]"
+   ```
+
+2. **Velocity Control**:
+   ```bash
+   ros2 topic pub /arm_controller/commands std_msgs/msg/Float64MultiArray "data: [0.1, 0.05, 0.02]"
+   ```
+
+3. **Effort Control**:
+   ```bash
+   ros2 topic pub /arm_controller/commands std_msgs/msg/Float64MultiArray "data: [2.0, 1.5, 1.0]"
+   ```
+
+#### Alternative: Individual Controllers (Not Recommended)
+
+```yaml
+# Position controller
+position_controller:
+  type: position_controllers/JointGroupPositionController
+  interface_name: position
+
+# Velocity controller  
+velocity_controller:
+  type: velocity_controllers/JointGroupVelocityController
+  interface_name: velocity
+
+# Effort controller
+effort_controller:
+  type: effort_controllers/JointGroupEffortController
+  interface_name: effort
+```
+
+**Problems with Individual Controllers:**
+- ❌ Resource overhead (three separate controllers)
+- ❌ Coordination issues between control modes
+- ❌ Complex management and switching
+- ❌ Different topics and message types
+- ❌ Limited flexibility for combined control
+
 ## ROS 2 Controllers Overview
 
 Based on the [ROS 2 Controllers documentation](https://control.ros.org/jazzy/doc/ros2_controllers/doc/controllers_index.html), this project supports various controller types for different control requirements:
@@ -208,12 +301,15 @@ arm_controller:
   interface_name: velocity
 ```
 
-3. **Trajectory Control Setup**:
+3. **Recommended: Trajectory Control Setup** (for individual position/velocity/effort control):
 ```yaml
 arm_controller:
   type: joint_trajectory_controller/JointTrajectoryController
   command_interfaces: [position, velocity, effort]
   state_interfaces: [position, velocity, effort]
+  state_publish_rate: 50.0
+  action_monitor_rate: 20.0
+  allow_partial_joints_goal: true
 ```
 
 ### 2. controllers.launch.py
@@ -390,6 +486,23 @@ ros2 control list_controllers
 7. Switch controller types:
 ```bash
 ros2 control switch_controllers --start <controller_name> --stop <controller_name>
+```
+
+### Individual Control Commands (with Joint Trajectory Controller)
+
+8. Send position commands:
+```bash
+ros2 topic pub /arm_controller/commands std_msgs/msg/Float64MultiArray "data: [0.5, 0.3, 0.2]"
+```
+
+9. Send velocity commands:
+```bash
+ros2 topic pub /arm_controller/commands std_msgs/msg/Float64MultiArray "data: [0.1, 0.05, 0.02]"
+```
+
+10. Send effort commands:
+```bash
+ros2 topic pub /arm_controller/commands std_msgs/msg/Float64MultiArray "data: [2.0, 1.5, 1.0]"
 ```
 
 ## Data Logging
