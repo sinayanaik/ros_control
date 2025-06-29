@@ -683,13 +683,113 @@ File naming convention: `joint_states_YYYYMMDD_HHMMSS.csv`
    - Use simplified collision models
    - Adjust Gazebo physics parameters
 
-## Contributing
+### Detailed Controller Types and PID Implementation
 
-1. Fork the repository
-2. Create a feature branch
-3. Commit your changes
-4. Push to the branch
-5. Create a Pull Request
+#### 1. Position Controllers
+- **Controller Type**: Closed-loop PID control
+- **PID Implementation**: 
+  - Full PID control (Proportional, Integral, Derivative)
+  - Error calculated as: e(t) = desired_position - current_position
+  - Control law: u(t) = Kp*e(t) + Ki∫e(t)dt + Kd*de(t)/dt
+- **Feedback**: 
+  - Primary: Position feedback (required)
+  - Optional: Velocity feedback for D term
+- **Use Cases**:
+  - Precise positioning tasks
+  - Point-to-point movements
+  - Applications requiring position holding
+- **Configuration Example**:
+```yaml
+position_controller:
+  type: position_controllers/JointGroupPositionController
+  gains:
+    joint1: {p: 100.0, i: 0.01, d: 10.0}
+    joint2: {p: 100.0, i: 0.01, d: 10.0}
+```
+
+#### 2. Velocity Controllers
+- **Controller Type**: Closed-loop PI control
+- **PID Implementation**:
+  - Typically PI control (no D term)
+  - Error calculated as: e(t) = desired_velocity - current_velocity
+  - Control law: u(t) = Kp*e(t) + Ki∫e(t)dt
+- **Feedback**:
+  - Primary: Velocity feedback (required)
+  - No position feedback needed
+- **Use Cases**:
+  - Continuous motion control
+  - Speed regulation
+  - Applications requiring smooth motion
+- **Configuration Example**:
+```yaml
+velocity_controller:
+  type: velocity_controllers/JointGroupVelocityController
+  gains:
+    joint1: {p: 10.0, i: 0.1}
+    joint2: {p: 10.0, i: 0.1}
+```
+
+#### 3. Effort Controllers
+- **Controller Type**: Can be either open-loop or closed-loop
+- **PID Implementation**:
+  - Open-loop: Direct torque/force commands (no PID)
+  - Closed-loop: Full PID based on position or velocity error
+- **Feedback**:
+  - Open-loop: No feedback required
+  - Closed-loop: Position, velocity, and effort feedback
+- **Use Cases**:
+  - Direct torque/force control
+  - Compliant motion control
+  - Force-based interactions
+- **Configuration Example**:
+```yaml
+# Open-loop effort controller (current project configuration)
+effort_controller:
+  type: effort_controllers/JointGroupEffortController
+  interface_name: effort
+  open_loop_control: true
+
+# Closed-loop effort controller with PID
+effort_controller:
+  type: effort_controllers/JointGroupEffortController
+  gains:
+    joint1: {p: 1000.0, i: 100.0, d: 10.0}
+    joint2: {p: 1000.0, i: 100.0, d: 10.0}
+```
+
+#### Current Project Configuration
+The project currently uses a Forward Command Controller:
+```yaml
+arm_controller:
+  type: forward_command_controller/ForwardCommandController
+  interface_name: effort
+  open_loop_control: true
+```
+This is an open-loop effort controller that:
+- Directly forwards effort commands to the joints
+- Does not implement PID control
+- Suitable for testing and development
+- Requires external feedback control if precise positioning is needed
+
+#### PID Control Recommendations
+1. **For Precise Positioning**:
+   - Use Position Controllers with PID
+   - Tune Kp for quick response
+   - Add Ki for steady-state error elimination
+   - Use Kd for damping oscillations
+
+2. **For Smooth Motion**:
+   - Use Velocity Controllers with PI
+   - Focus on Kp for response speed
+   - Minimal Ki for drift compensation
+   - Avoid Kd to prevent noise amplification
+
+3. **For Force Control**:
+   - Start with open-loop effort control for testing
+   - Add PID for precise force regulation
+   - Use lower gains for compliance
+   - Consider admittance control for human interaction 
+
 
 ## License
 
@@ -700,4 +800,4 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 - [ROS 2 Controllers Documentation](https://control.ros.org/jazzy/doc/ros2_controllers/doc/controllers_index.html)
 - [ros2_control Framework](https://control.ros.org/)
 - [Gazebo Simulation](https://gazebosim.org/)
-- [ROS 2 Control Tutorials](https://control.ros.org/master/doc/ros2_control/index.html) 
+- [ROS 2 Control Tutorials](https://control.ros.org/master/doc/ros2_control/index.html)
