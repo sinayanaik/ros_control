@@ -7,11 +7,13 @@ endif()
 
 # Find dependencies
 find_package(ament_cmake REQUIRED)
+find_package(rclpy REQUIRED)
 
 # Install Python scripts
 install(PROGRAMS
   src/trajectory_publisher.py
   src/trajectory_effort_publisher.py
+  src/plot_joint_data.py
   DESTINATION lib/${PROJECT_NAME}
 )
 
