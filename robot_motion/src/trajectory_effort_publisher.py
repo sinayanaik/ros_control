@@ -60,29 +60,50 @@ class TrajectoryEffortPublisher(Node):
         try:
             # Setup CSV logging
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            # Always create data directory in joint_data under the workspace root
-            ws_root = pathlib.Path(__file__).resolve().parents[2]
+            
+            # Get workspace root directory (this file is in src/robot_motion/src/)
+            ws_root = str(pathlib.Path(__file__).resolve().parents[4])  # Go up 4 levels to reach workspace root
+            self.get_logger().info(f'Workspace root: {ws_root}')
+            
+            # Create joint_data directory in workspace root
             self.data_dir = os.path.join(ws_root, 'joint_data')
-            os.makedirs(self.data_dir, exist_ok=True)
+            try:
+                os.makedirs(self.data_dir, exist_ok=True)
+                self.get_logger().info(f'Created/verified data directory: {self.data_dir}')
+            except Exception as e:
+                self.get_logger().error(f'Failed to create data directory: {str(e)}')
+                raise
+            
+            # Create CSV file path
             self.csv_file = os.path.join(self.data_dir, f'joint_states_{timestamp}.csv')
             self.get_logger().info(f'Will write data to: {self.csv_file}')
             
-            # Create CSV file with headers
-            with open(self.csv_file, 'w', newline='') as f:
-                writer = csv.writer(f)
-                headers = ['timestamp']
-                for joint in self.joint_names:
-                    headers.extend([f'{joint}_position', f'{joint}_velocity', f'{joint}_effort'])
-                headers.extend(['gripper_x', 'gripper_y', 'gripper_z'])
-                writer.writerow(headers)
-                self.get_logger().info('Successfully created CSV file with headers')
+            # Verify directory is writable
+            if not os.access(self.data_dir, os.W_OK):
+                self.get_logger().error(f'Data directory is not writable: {self.data_dir}')
+                raise PermissionError(f'Data directory is not writable: {self.data_dir}')
             
-            self.get_logger().info('Effort trajectory publisher started')
+            # Create CSV file with headers
+            try:
+                with open(self.csv_file, 'w', newline='') as f:
+                    writer = csv.writer(f)
+                    headers = ['timestamp']
+                    for joint in self.joint_names:
+                        headers.extend([f'{joint}_position', f'{joint}_velocity', f'{joint}_effort'])
+                    headers.extend(['gripper_x', 'gripper_y', 'gripper_z'])
+                    writer.writerow(headers)
+                    self.get_logger().info('Successfully created CSV file with headers')
+            except Exception as e:
+                self.get_logger().error(f'Failed to create CSV file: {str(e)}')
+                raise
+            
+            self.get_logger().info('Effort trajectory publisher started successfully')
             
         except Exception as e:
             self.get_logger().error(f'Failed to setup data logging: {str(e)}')
             self.get_logger().error(f'Exception type: {type(e).__name__}')
             self.csv_file = None
+            raise
 
     def get_cartesian_position(self):
         try:
