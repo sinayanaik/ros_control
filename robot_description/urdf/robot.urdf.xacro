@@ -5,26 +5,26 @@
   <xacro:include filename="$(find robot_description)/urdf/robot_control.xacro"/>
 
   <!-- Link Parameters -->
-  <xacro:property name="r1" value="0.025"/>
-  <xacro:property name="r2" value="0.02"/>
-  <xacro:property name="r3" value="0.02"/>
-  <xacro:property name="r4" value="0.015"/>
+  <xacro:property name="r1" value="0.024"/>   <!-- Base link radius -->
+  <xacro:property name="r2" value="0.020"/>  <!-- Second link radius -->
+  <xacro:property name="r3" value="0.020"/>   <!-- Third link radius -->
+  <xacro:property name="r4" value="0.015"/>  <!-- End effector radius -->
 
-  <xacro:property name="l1" value="0.15"/>
-  <xacro:property name="l2" value="0.2"/>
-  <xacro:property name="l3" value="0.15"/>
-  <xacro:property name="l4" value="0.1"/>
+  <xacro:property name="l1" value="0.25"/>    <!-- Base link length -->
+  <xacro:property name="l2" value="0.15"/>   <!-- Second link length -->
+  <xacro:property name="l3" value="0.15"/>    <!-- Third link length -->
+  <xacro:property name="l4" value="0.10"/>   <!-- End effector length -->
 
-  <xacro:property name="m1" value="1.0"/>
-  <xacro:property name="m2" value="0.8"/>
-  <xacro:property name="m3" value="0.6"/>
-  <xacro:property name="m4" value="0.5"/>
+  <xacro:property name="m1" value="0.8"/>    <!-- Base link mass -->
+  <xacro:property name="m2" value="0.6"/>    <!-- Second link mass -->
+  <xacro:property name="m3" value="0.4"/>    <!-- Third link mass -->
+  <xacro:property name="m4" value="0.3"/>    <!-- End effector mass -->
 
   <!-- Joint Visual Parameters -->
-  <xacro:property name="joint1_radius" value="0.05"/>
+  <xacro:property name="joint1_radius" value="0.035"/>
   <xacro:property name="joint2_radius" value="0.020"/>
   <xacro:property name="joint3_radius" value="0.020"/>
-  <xacro:property name="joint4_radius" value="0.020"/>
+  <xacro:property name="joint4_radius" value="0.013"/>
   
   <xacro:property name="joint1_length" value="0.06"/>
   <xacro:property name="joint2_length" value="0.05"/>

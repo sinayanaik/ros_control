@@ -3,7 +3,7 @@ controller_manager:
     update_rate: 1000 # Hz
 
     arm_controller:
-      type: "joint_trajectory_controller/JointTrajectoryController"
+      type: "forward_command_controller/ForwardCommandController"
 
     joint_state_broadcaster:
       type: joint_state_broadcaster/JointStateBroadcaster
@@ -18,11 +18,7 @@ arm_controller:
       - link_2_to_link_3
       - link_3_to_link_4
 
-    command_interfaces:
-      - position
-
-    state_interfaces:
-      - position
+    interface_name: effort
 
     open_loop_control: true
     allow_integration_in_goal_trajectories: true
@@ -32,12 +28,7 @@ gripper_controller:
     joints:
       - link_4_to_gripper
 
-    interface_name: position
-    command_interfaces:
-      - position
-
-    state_interfaces:
-      - position
+    interface_name: effort
 
     open_loop_control: true
     allow_integration_in_goal_trajectories: true

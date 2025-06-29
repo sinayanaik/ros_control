@@ -11,6 +11,7 @@ find_package(ament_cmake REQUIRED)
 # Install Python scripts
 install(PROGRAMS
   src/trajectory_publisher.py
+  src/trajectory_effort_publisher.py
   DESTINATION lib/${PROJECT_NAME}
 )
 

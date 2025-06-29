@@ -11,35 +11,31 @@
         <!-- Define Command and State interfaces for each joints -->
 
         <joint name="link_4_to_gripper">
-            <command_interface name="position">
-                <param name="min">-${PI / 2}</param>
-                <param name="max">${PI / 2}</param>
-            </command_interface>
-            <state_interface name="position" />
+            <command_interface name="effort"/>
+            <state_interface name="position"/>
+            <state_interface name="velocity"/>
+            <state_interface name="effort"/>
         </joint>
 
         <joint name="link_1_to_link_2">
-            <command_interface name="position">
-                <param name="min">-${PI / 2}</param>
-                <param name="max">${PI / 2}</param>
-            </command_interface>
-            <state_interface name="position" />
+            <command_interface name="effort"/>
+            <state_interface name="position"/>
+            <state_interface name="velocity"/>
+            <state_interface name="effort"/>
         </joint>
 
         <joint name="link_2_to_link_3">
-            <command_interface name="position">
-                <param name="min">-${PI / 2}</param>
-                <param name="max">${PI / 2}</param>
-            </command_interface>
-            <state_interface name="position" />
+            <command_interface name="effort"/>
+            <state_interface name="position"/>
+            <state_interface name="velocity"/>
+            <state_interface name="effort"/>
         </joint>
 
         <joint name="link_3_to_link_4">
-            <command_interface name="position">
-                <param name="min">-${PI / 2}</param>
-                <param name="max">${PI / 2}</param>
-            </command_interface>
-            <state_interface name="position" />
+            <command_interface name="effort"/>
+            <state_interface name="position"/>
+            <state_interface name="velocity"/>
+            <state_interface name="effort"/>
         </joint>
 
     </ros2_control>
