@@ -14,6 +14,9 @@ import os
 import signal
 import sys
 from pathlib import Path
+from visualization_msgs.msg import Marker
+import tf2_ros
+from geometry_msgs.msg import TransformStamped
 
 class JointPositionPublisher(Node):
     def __init__(self):
@@ -23,6 +26,13 @@ class JointPositionPublisher(Node):
         self.position_pub = self.create_publisher(
             Float64MultiArray, 
             '/arm_controller/commands',
+            10
+        )
+        
+        # Create marker publisher
+        self.marker_pub = self.create_publisher(
+            Marker,
+            '/visualization_marker',
             10
         )
         
@@ -63,6 +73,9 @@ class JointPositionPublisher(Node):
         
         # Setup signal handler for Ctrl+C
         signal.signal(signal.SIGINT, self.signal_handler)
+        
+        self.tf_buffer = tf2_ros.Buffer()
+        self.tf_listener = tf2_ros.TransformListener(self.tf_buffer, self)
         
     def joint_state_callback(self, msg):
         """Callback to receive joint state data"""
@@ -132,6 +145,8 @@ class JointPositionPublisher(Node):
         self.data['actual_positions'].append(actual_positions)
         self.data['velocities'].append(velocities)
         self.data['efforts'].append(efforts)
+        
+        self.publish_marker_from_tf()
         
         self.get_logger().info(f'Sent positions: {desired_positions}')
         
@@ -276,6 +291,53 @@ class JointPositionPublisher(Node):
         plt.show()
         
         self.get_logger().info(f'Plots saved to: {output_dir}')
+
+    def publish_marker_from_tf(self):
+        try:
+            # Look up transform from base_link to gripper_base
+            tf: TransformStamped = self.tf_buffer.lookup_transform(
+                'base_link',
+                'gripper_base',
+                rclpy.time.Time(),
+                rclpy.duration.Duration(seconds=1.0)  # Add timeout
+            )
+            
+            # Create and publish marker
+            marker = Marker()
+            marker.header.frame_id = "base_link"
+            marker.header.stamp = self.get_clock().now().to_msg()
+            marker.ns = "end_effector"
+            marker.id = 0
+            marker.type = Marker.SPHERE
+            marker.action = Marker.ADD
+            
+            # Set position from transform
+            marker.pose.position.x = tf.transform.translation.x
+            marker.pose.position.y = tf.transform.translation.y
+            marker.pose.position.z = tf.transform.translation.z
+            
+            # Set orientation from transform
+            marker.pose.orientation = tf.transform.rotation
+            
+            # Set marker properties
+            marker.scale.x = 0.04
+            marker.scale.y = 0.04
+            marker.scale.z = 0.04
+            marker.color.r = 0.2
+            marker.color.g = 0.8
+            marker.color.b = 0.2
+            marker.color.a = 1.0
+            marker.lifetime.sec = 3
+            marker.lifetime.nanosec = 0
+            
+            self.marker_pub.publish(marker)
+            
+        except tf2_ros.LookupException as e:
+            self.get_logger().debug(f'Transform not available yet: {str(e)}')
+        except tf2_ros.ExtrapolationException as e:
+            self.get_logger().debug(f'Transform extrapolation failed: {str(e)}')
+        except Exception as e:
+            self.get_logger().error(f'Error publishing marker: {str(e)}')
 
 def main():
     rclpy.init()
