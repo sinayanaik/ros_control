@@ -12,7 +12,6 @@ find_package(rclpy REQUIRED)
 # Install Python scripts
 install(PROGRAMS
   src/send_position.py
-  src/plot_joint_data.py
   DESTINATION lib/${PROJECT_NAME}
 )
 
