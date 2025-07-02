@@ -1,43 +1,85 @@
 <?xml version="1.0"?>
 <robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="3dof_robot">
+    <!-- Define PI constant -->
+    <xacro:property name="PI" value="3.14159265359"/>
 
     <ros2_control name="RobotSystem" type="system">
-
-        <xacro:property name="PI" value="3.14159265359" />
         <hardware>
             <plugin>gz_ros2_control/GazeboSimSystem</plugin>
         </hardware>
 
-        <!-- Define Command and State interfaces for each joints -->
-
-        <joint name="link_4_to_gripper">
-            <command_interface name="effort"/>
-            <state_interface name="position"/>
-            <state_interface name="velocity"/>
-            <state_interface name="effort"/>
-        </joint>
-
+        <!-- Base Joint -->
         <joint name="link_1_to_link_2">
-            <command_interface name="effort"/>
+            <command_interface name="position"/>
             <state_interface name="position"/>
             <state_interface name="velocity"/>
-            <state_interface name="effort"/>
+            <param name="initial_position">0.0</param>
         </joint>
 
+        <!-- Shoulder Joint -->
         <joint name="link_2_to_link_3">
-            <command_interface name="effort"/>
+            <command_interface name="position"/>
             <state_interface name="position"/>
             <state_interface name="velocity"/>
-            <state_interface name="effort"/>
+            <param name="initial_position">0.0</param>
         </joint>
 
+        <!-- Elbow Joint -->
         <joint name="link_3_to_link_4">
-            <command_interface name="effort"/>
+            <command_interface name="position"/>
             <state_interface name="position"/>
             <state_interface name="velocity"/>
-            <state_interface name="effort"/>
+            <param name="initial_position">0.0</param>
         </joint>
 
+        <!-- Gripper Joint -->
+        <joint name="link_4_to_gripper">
+            <command_interface name="position"/>
+            <state_interface name="position"/>
+            <state_interface name="velocity"/>
+            <param name="initial_position">0.0</param>
+        </joint>
     </ros2_control>
+
+    <!-- Transmissions -->
+    <transmission name="link_1_to_link_2_trans">
+        <type>transmission_interface/SimpleTransmission</type>
+        <joint name="link_1_to_link_2">
+            <hardwareInterface>hardware_interface/PositionJointInterface</hardwareInterface>
+        </joint>
+        <actuator name="link_1_to_link_2_motor">
+            <mechanicalReduction>1</mechanicalReduction>
+        </actuator>
+    </transmission>
+
+    <transmission name="link_2_to_link_3_trans">
+        <type>transmission_interface/SimpleTransmission</type>
+        <joint name="link_2_to_link_3">
+            <hardwareInterface>hardware_interface/PositionJointInterface</hardwareInterface>
+        </joint>
+        <actuator name="link_2_to_link_3_motor">
+            <mechanicalReduction>1</mechanicalReduction>
+        </actuator>
+    </transmission>
+
+    <transmission name="link_3_to_link_4_trans">
+        <type>transmission_interface/SimpleTransmission</type>
+        <joint name="link_3_to_link_4">
+            <hardwareInterface>hardware_interface/PositionJointInterface</hardwareInterface>
+        </joint>
+        <actuator name="link_3_to_link_4_motor">
+            <mechanicalReduction>1</mechanicalReduction>
+        </actuator>
+    </transmission>
+
+    <transmission name="link_4_to_gripper_trans">
+        <type>transmission_interface/SimpleTransmission</type>
+        <joint name="link_4_to_gripper">
+            <hardwareInterface>hardware_interface/PositionJointInterface</hardwareInterface>
+        </joint>
+        <actuator name="link_4_to_gripper_motor">
+            <mechanicalReduction>1</mechanicalReduction>
+        </actuator>
+    </transmission>
 
 </robot>

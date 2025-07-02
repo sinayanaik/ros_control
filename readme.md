@@ -1,6 +1,6 @@
 # ROS 2 Robot Control Project
 
-A comprehensive ROS 2 project implementing a 3-DOF robot arm with a gripper, featuring position/effort control modes, trajectory generation, and real-time data visualization.
+A comprehensive ROS 2 project implementing a 3-DOF robot arm with a gripper, featuring position control with position/velocity state feedback, trajectory generation, and real-time data visualization.
 
 ## Table of Contents
 1. [Project Overview](#project-overview)
@@ -18,11 +18,12 @@ A comprehensive ROS 2 project implementing a 3-DOF robot arm with a gripper, fea
 
 ### Features
 - 3-DOF robot arm with gripper
-- Multiple control modes (Position/Effort)
+- Position control with position/velocity feedback
 - Real-time trajectory generation
 - Data logging and visualization
 - Gazebo simulation integration
 - RViz visualization
+- MoveIt2 compatibility
 
 ## Robot Structure
 
@@ -63,6 +64,7 @@ sudo apt install ros-jazzy-desktop-full
 # Required Packages
 sudo apt install ros-jazzy-gz-ros2-control
 sudo apt install ros-jazzy-ros2-controllers
+sudo apt install ros-jazzy-joint-trajectory-controller
 sudo apt install ros-jazzy-joint-state-publisher-gui
 sudo apt install python3-pip
 pip3 install pandas matplotlib numpy
@@ -85,7 +87,7 @@ ros_control/
 │   │   ├── config/        # Controller parameters
 │   │   └── launch/        # Controller spawning
 │   └── robot_motion/      # Motion generation
-│       └── src/           # Trajectory generators
+│       └── src/           # Position control nodes
 ```
 
 ## Step-by-Step Implementation
@@ -105,56 +107,66 @@ ros2 pkg create robot_description --build-type ament_cmake
     - Joint limits
     - Link dimensions
     - Inertial properties
+  - Important: Define PI constant for joint rotations
+    ```xml
+    <xacro:property name="PI" value="3.14159265359"/>
+    ```
 
 - **robot_control.xacro**: Control interface definition
   ```xml
+  <!-- ros2_control tag: Defines the control system configuration -->
   <ros2_control name="RobotSystem" type="system">
+    <hardware>
+      <plugin>gz_ros2_control/GazeboSimSystem</plugin>
+    </hardware>
+
+    <!-- Joint interface configuration -->
     <joint name="link_1_to_link_2">
-      <!-- Current: Effort Control -->
-      <command_interface name="effort"/>
-      <state_interface name="position"/>
-      <state_interface name="velocity"/>
-      <state_interface name="effort"/>
-      
-      <!-- For Position Control:
+      <!-- Command interface: What type of commands the joint accepts -->
       <command_interface name="position"/>
-      <state_interface name="position"/>
-      -->
       
-      <!-- For Velocity Control:
-      <command_interface name="velocity"/>
+      <!-- State interfaces: What feedback the joint provides -->
       <state_interface name="position"/>
       <state_interface name="velocity"/>
-      -->
+      
+      <!-- Initial joint configuration -->
+      <param name="initial_position">0.0</param>
     </joint>
   </ros2_control>
+
+  <!-- Transmission tag: Maps actuator to joint -->
+  <transmission name="link_1_to_link_2_trans">
+    <type>transmission_interface/SimpleTransmission</type>
+    <joint name="link_1_to_link_2">
+      <hardwareInterface>hardware_interface/PositionJointInterface</hardwareInterface>
+    </joint>
+    <actuator name="link_1_to_link_2_motor">
+      <mechanicalReduction>1</mechanicalReduction>
+    </actuator>
+  </transmission>
   ```
 
 ### Available Control Interfaces
 
-1. **Position Control**
+1. **Position Control** (Current Implementation)
    - Command Interface: `position`
-   - State Interfaces: `position`
+   - State Interfaces: `position`, `velocity`
    - Use Case: Precise positioning tasks
    - Required Changes:
      - Update URDF command_interface to "position"
-     - Modify controller type to "position_controllers/JointGroupPositionController"
+     - Use JointTrajectoryController
+     - Add transmission tags
 
-2. **Velocity Control**
+2. **Velocity Control** (Alternative Option)
    - Command Interface: `velocity`
    - State Interfaces: `position`, `velocity`
    - Use Case: Smooth continuous motion
    - Required Changes:
      - Update URDF command_interface to "velocity"
-     - Modify controller type to "velocity_controllers/JointGroupVelocityController"
+     - Update controller configuration
+     - Modify transmission interface
 
-3. **Effort Control**
-   - Command Interface: `effort`
-   - State Interfaces: `position`, `velocity`, `effort`
-   - Use Case: Force control and compliant motion
-   - Required Changes:
-     - Update URDF command_interface to "effort"
-     - Modify controller type to "effort_controllers/JointGroupEffortController"
+Note: Effort control is not supported by JointTrajectoryController in ROS 2 Jazzy.
 
 ### 2. Robot Controller Package
 
@@ -163,79 +175,77 @@ ros2 pkg create robot_description --build-type ament_cmake
 ros2 pkg create robot_controller --build-type ament_cmake
 ```
 
-2. Key Files:
+2. Dependencies:
+```xml
+<exec_depend>joint_trajectory_controller</exec_depend>
+<exec_depend>joint_state_broadcaster</exec_depend>
+<exec_depend>controller_manager</exec_depend>
+<exec_depend>gz_ros2_control</exec_depend>
+```
+
+3. Key Files:
 - **robot_controllers.yaml**: Controller configuration
   ```yaml
   controller_manager:
     ros__parameters:
       update_rate: 1000  # Hz
       arm_controller:
-        type: "forward_command_controller/ForwardCommandController"
-  
+        type: joint_trajectory_controller/JointTrajectoryController
+
   arm_controller:
     ros__parameters:
       joints:
         - link_1_to_link_2
         - link_2_to_link_3
         - link_3_to_link_4
-      interface_name: effort
+      
+      command_interfaces:
+        - position
+      
+      state_interfaces:
+        - position
+        - velocity
+      
+      state_publish_rate: 50.0
+      action_monitor_rate: 20.0
+      allow_partial_joints_goal: true
   ```
-  Critical: Match interface_name with URDF control interfaces
-
-- **controllers.launch.py**: Controller spawning
-  - Loads controller configurations
-  - Spawns controllers in correct order
-  - Common Pitfall: Ensure joint_state_broadcaster starts first
 
 ### 3. Robot Motion Package
 
 1. Create the package:
 ```bash
-ros2 pkg create robot_motion --build-type ament_cmake --dependencies rclpy trajectory_msgs
+ros2 pkg create robot_motion --build-type ament_cmake --dependencies rclpy control_msgs
 ```
 
 2. Key Files:
-- **trajectory_publisher.py**: Trajectory generation
+- **send_position.py**: Position control node
   ```python
-  # For effort control
-  self.publisher = self.create_publisher(
-      JointTrajectory, 
-      '/arm_controller/joint_trajectory', 
-      10
+  # Create action client for trajectory execution
+  self.action_client = ActionClient(
+      self, 
+      FollowJointTrajectory, 
+      '/arm_controller/follow_joint_trajectory'
   )
+  
+  # Send position commands
+  goal_msg = FollowJointTrajectory.Goal()
+  point = JointTrajectoryPoint()
+  point.positions = positions
+  point.velocities = [0.0] * len(self.joint_names)
+  point.time_from_start = Duration(sec=2)
   ```
-  Important: Match topic names with controller type
 
 ## Control Architecture
-
-### Forward Command Controller
-- Direct effort commands
-- No feedback control
-- Simple but requires external feedback
-- Use when: Testing basic movements, implementing custom control loops
 
 ### Joint Trajectory Controller
 - Position-based control
 - Built-in trajectory interpolation
-- Feedback control
-- Use when: Smooth trajectory following needed
+- Position and velocity feedback
+- MoveIt2 compatible
+- Smooth trajectory execution
 
-## Controller Selection Guide
-
-### Recommended Approach: Joint Trajectory Controller
-
-When implementing robot control, the Joint Trajectory Controller is recommended over individual controllers for the following reasons:
-
-#### Advantages
-1. **Unified Interface**: One controller handles all control modes
-2. **Flexibility**: Switch between control modes without changing controllers
-3. **Professional Grade**: Industry-standard approach
-4. **MoveIt2 Compatibility**: Works with motion planning frameworks
-5. **Trajectory Support**: Handles complex multi-point trajectories
-6. **Online Switching**: Change control modes during operation
-7. **Resource Efficiency**: Single controller vs. three separate ones
-
-#### Configuration Example
+### Controller Configuration
 ```yaml
 arm_controller:
   type: joint_trajectory_controller/JointTrajectoryController
@@ -245,103 +255,47 @@ arm_controller:
       - link_2_to_link_3
       - link_3_to_link_4
     
-    # Support all control interfaces
     command_interfaces:
       - position
-      - velocity
-      - effort
     
-    # Get feedback from all interfaces
     state_interfaces:
       - position
       - velocity
-      - effort
     
-    # Controller parameters
     state_publish_rate: 50.0
     action_monitor_rate: 20.0
-    allow_partial_joints_goal: true
-    constraints:
-      stopped_velocity_tolerance: 0.01
-      goal_time: 0.0
 ```
 
-### Controller Types Overview
+## Controller Selection Guide
 
-#### 1. Basic Controllers
+### Joint Trajectory Controller Features
+1. **Unified Interface**: One controller handles all control modes
+2. **Flexibility**: Switch between control modes without changing controllers
+3. **Professional Grade**: Industry-standard approach
+4. **MoveIt2 Compatibility**: Works with motion planning frameworks
+5. **Trajectory Support**: Handles complex multi-point trajectories
+6. **Online Switching**: Change control modes during operation
+7. **Resource Efficiency**: Single controller vs. three separate ones
 
-##### Position Controller
-- **Type**: `position_controllers/JointGroupPositionController`
-- **Purpose**: Direct position control
-- **Use Cases**: 
-  - Precise positioning
-  - Point-to-point movements
-  - Static pose maintenance
-- **Advantages**: Simple implementation
-- **Limitations**: No velocity/acceleration control
-
-##### Velocity Controller
-- **Type**: `velocity_controllers/JointGroupVelocityController`
-- **Purpose**: Direct velocity control
-- **Use Cases**:
-  - Continuous motion
-  - Speed regulation
-  - Smooth trajectories
-- **Advantages**: Smooth motion
-- **Limitations**: No position feedback
-
-##### Effort Controller
-- **Type**: `effort_controllers/JointGroupEffortController`
-- **Purpose**: Direct torque/force control
-- **Use Cases**:
-  - Force control
-  - Compliant motion
-  - Impedance control
-- **Advantages**: Direct force control
-- **Limitations**: Requires careful tuning
-
-#### 2. Advanced Controllers
-
-##### Joint Trajectory Controller
-- **Type**: `joint_trajectory_controller/JointTrajectoryController`
-- **Features**:
-  - Multi-point trajectories
-  - Smooth interpolation
-  - Online trajectory updates
-  - MoveIt2 compatible
-- **Use Cases**: Industrial applications
-
-##### PID Controller
-- **Type**: `pid_controller/PIDController`
-- **Features**:
-  - Configurable gains
-  - Anti-windup
-  - Multiple control modes
-- **Use Cases**: Precise positioning
-
-##### Admittance Controller
-- **Type**: `admittance_controller/AdmittanceController`
-- **Features**:
-  - Force-based control
-  - Compliant behavior
-  - Safety-oriented
-- **Use Cases**: Human-robot interaction
-
-### Usage Examples
-
-1. Position Control:
-```bash
-ros2 topic pub /arm_controller/commands std_msgs/msg/Float64MultiArray "data: [0.5, 0.3, 0.2]"
-```
-
-2. Velocity Control:
-```bash
-ros2 topic pub /arm_controller/commands std_msgs/msg/Float64MultiArray "data: [0.1, 0.05, 0.02]"
-```
-
-3. Effort Control:
-```bash
-ros2 topic pub /arm_controller/commands std_msgs/msg/Float64MultiArray "data: [2.0, 1.5, 1.0]"
+### Configuration Example
+```yaml
+arm_controller:
+  type: joint_trajectory_controller/JointTrajectoryController
+  ros__parameters:
+    joints:
+      - link_1_to_link_2
+      - link_2_to_link_3
+      - link_3_to_link_4
+    
+    command_interfaces:
+      - position
+    
+    state_interfaces:
+      - position
+      - velocity
+    
+    state_publish_rate: 50.0
+    action_monitor_rate: 20.0
 ```
 
 ## Common Pitfalls
@@ -349,18 +303,22 @@ ros2 topic pub /arm_controller/commands std_msgs/msg/Float64MultiArray "data: [2
 1. **Interface Mismatch**
    - Symptom: Controller fails to start
    - Fix: Ensure URDF and controller config interfaces match
+   - Note: JointTrajectoryController only supports position, velocity as state interfaces
 
-2. **Controller Spawning Order**
+2. **Missing PI Constant**
+   - Symptom: XACRO processing fails
+   - Fix: Define PI constant in URDF files
+   ```xml
+   <xacro:property name="PI" value="3.14159265359"/>
+   ```
+
+3. **Controller Spawning Order**
    - Symptom: Controllers fail to start
    - Fix: Always spawn joint_state_broadcaster first
 
-3. **Gazebo Integration**
-   - Symptom: Robot doesn't move in simulation
-   - Fix: Check gz_ros2_control plugin parameters
-
-4. **Topic Mismatch**
-   - Symptom: Commands not reaching robot
-   - Fix: Verify controller type and corresponding topics
+4. **Action Interface Issues**
+   - Symptom: Position commands not reaching robot
+   - Fix: Check action server name and message types
 
 ## Usage Guide
 
@@ -380,9 +338,9 @@ ros2 launch robot_description robot.launch.py
 ros2 launch robot_controller controllers.launch.py
 ```
 
-4. Run trajectory generator:
+4. Run position control node:
 ```bash
-ros2 run robot_motion trajectory_publisher.py
+ros2 run robot_motion send_position.py
 ```
 
 ## Troubleshooting
@@ -397,16 +355,24 @@ ros2 control list_hardware_interfaces
 
 # Monitor joint states
 ros2 topic echo /joint_states
+
+# Test action interface
+ros2 action list
+ros2 action info /arm_controller/follow_joint_trajectory
 ```
 
 ### Common Error Messages
 1. "Invalid value set during initialization for parameter 'state_interfaces'"
-   - Cause: Unsupported interface combination
-   - Solution: Check supported interfaces in controller documentation
+   - Cause: Using unsupported state interfaces (e.g., effort)
+   - Solution: Use only position and velocity state interfaces
 
 2. "Could not initialize the controller"
    - Cause: Interface mismatch or missing dependencies
    - Solution: Verify URDF and controller configuration match
+
+3. "name 'PI' is not defined"
+   - Cause: Missing PI constant in URDF
+   - Solution: Add PI constant definition in URDF files
 
 ## License
 
