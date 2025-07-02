@@ -1,109 +1,233 @@
 # ROS 2 Robot Control Project
 
-A comprehensive ROS 2 project implementing a 3-DOF robot arm with a gripper, featuring multiple control modes, continuous trajectory generation, and real-time data logging. The robot can be simulated in Gazebo with various control interfaces and includes data visualization capabilities.
+A comprehensive ROS 2 project implementing a 3-DOF robot arm with a gripper, featuring position/effort control modes, trajectory generation, and real-time data visualization.
 
-## Features
+## Table of Contents
+1. [Project Overview](#project-overview)
+2. [Robot Structure](#robot-structure)
+3. [Prerequisites](#prerequisites)
+4. [Project Structure](#project-structure)
+5. [Step-by-Step Implementation](#step-by-step-implementation)
+6. [Control Architecture](#control-architecture)
+7. [Controller Selection Guide](#controller-selection-guide)
+8. [Common Pitfalls](#common-pitfalls)
+9. [Usage Guide](#usage-guide)
+10. [Troubleshooting](#troubleshooting)
 
-- 3-DOF robot arm with gripper end-effector
-- Multiple control modes: Position, Velocity, and Effort control
-- Real-time control at 1000 Hz
-- Continuous trajectory generation
+## Project Overview
+
+### Features
+- 3-DOF robot arm with gripper
+- Multiple control modes (Position/Effort)
+- Real-time trajectory generation
+- Data logging and visualization
 - Gazebo simulation integration
-- Modular package structure
-- Python-based trajectory generation
-- Real-time data logging to CSV
-- Data visualization and plotting
-- Comprehensive controller configurations
+- RViz visualization
 
 ## Robot Structure
 
-- **Links:**
-  - base_link
-  - link_1
-  - link_2
-  - link_3
-  - gripper_base
-  - gripper_left_finger
-  - gripper_right_finger
+### Links
+- base_link
+- link_1
+- link_2
+- link_3
+- gripper_base
+- gripper_left_finger
+- gripper_right_finger
 
-- **Joints:**
-  - link_1_to_link_2
-  - link_2_to_link_3
-  - link_3_to_link_4
-  - link_4_to_gripper
-  - gripper_left_finger_joint
-  - gripper_right_finger_joint
+### Joints
+- link_1_to_link_2
+- link_2_to_link_3
+- link_3_to_link_4
+- link_4_to_gripper
+- gripper_left_finger_joint
+- gripper_right_finger_joint
 
-- **Joint Connections:**
+### Joint Connections
 
-| Joint Name                 | Connects From   | Connects To           | Description      |
-|---------------------------|-----------------|-----------------------|------------------|
-| link_1_to_link_2          | link_1          | link_2                | base rotation    |
-| link_2_to_link_3          | link_2          | link_3                | shoulder         |
-| link_3_to_link_4          | link_3          | gripper_base          | elbow            |
-| link_4_to_gripper         | gripper_base    | gripper               | wrist            |
-| gripper_left_finger_joint | gripper_base    | gripper_left_finger   | left finger      |
-| gripper_right_finger_joint| gripper_base    | gripper_right_finger  | right finger     |
+| Joint Name | Connects From | Connects To | Description |
+|------------|--------------|-------------|-------------|
+| link_1_to_link_2 | link_1 | link_2 | base rotation |
+| link_2_to_link_3 | link_2 | link_3 | shoulder |
+| link_3_to_link_4 | link_3 | gripper_base | elbow |
+| link_4_to_gripper | gripper_base | gripper | wrist |
+| gripper_left_finger_joint | gripper_base | gripper_left_finger | left finger |
+| gripper_right_finger_joint | gripper_base | gripper_right_finger | right finger |
 
-## RViz and Gazebo Integration
-
-- The project now uses a single launch file to start both Gazebo and RViz together:
+## Prerequisites
 
 ```bash
-ros2 launch robot_description robot.launch.py
+# ROS 2 Jazzy
+sudo apt install ros-jazzy-desktop-full
+
+# Required Packages
+sudo apt install ros-jazzy-gz-ros2-control
+sudo apt install ros-jazzy-ros2-controllers
+sudo apt install ros-jazzy-joint-state-publisher-gui
+sudo apt install python3-pip
+pip3 install pandas matplotlib numpy
 ```
 
-- This launch file:
-  - Starts the Gazebo simulation with the robot model
-  - Launches RViz with the provided configuration
-  - Ensures only one robot_state_publisher is running
+## Project Structure
 
-## End Effector Path Visualization and Data Logging
+```
+ros_control/
+├── src/
+│   ├── robot_description/   # Robot model and visualization
+│   │   ├── urdf/           # Robot description files
+│   │   │   ├── robot.urdf.xacro        # Main robot description
+│   │   │   ├── robot_control.xacro     # Control interfaces
+│   │   │   ├── robot_gazebo.xacro      # Gazebo configuration
+│   │   │   └── robot_materials.xacro   # Visual properties
+│   │   ├── launch/         # Launch files
+│   │   └── config/         # RViz configuration
+│   ├── robot_controller/   # Control configuration
+│   │   ├── config/        # Controller parameters
+│   │   └── launch/        # Controller spawning
+│   └── robot_motion/      # Motion generation
+│       └── src/           # Trajectory generators
+```
 
-- The `trajectory_effort_publisher.py` node publishes a red sphere marker at the gripper in RViz, creating a fading trail (5 seconds) that shows the recent path of the end effector.
-- When you stop the node with Ctrl+C, it automatically saves joint and gripper data to a CSV in the `joint_data/` directory at the workspace root, and pops up two plots:
-  - Joint state plot (positions, velocities, efforts)
-  - 3D gripper trajectory plot
-- No separate plotting command is needed.
+## Step-by-Step Implementation
 
-## Usage
+### 1. Robot Description Package
 
-1. **Launch simulation and RViz:**
-   ```bash
-   ros2 launch robot_description robot.launch.py
-   ```
-2. **Start controllers:**
-   ```bash
-   ros2 launch robot_controller controllers.launch.py
-   ```
-3. **Run trajectory publisher:**
-   - Position-based:
-     ```bash
-     ros2 run robot_motion trajectory_publisher.py
-     ```
-   - Effort-based (with marker trail and auto-plotting):
-     ```bash
-     ros2 run robot_motion trajectory_effort_publisher.py
-     ```
-   - Press Ctrl+C to stop and see the plots.
-4. **In RViz:**
-   - Add a Marker display for `/gripper_position_marker` if not already present to see the end effector path trail.
+1. Create the package:
+```bash
+ros2 pkg create robot_description --build-type ament_cmake
+```
 
-## Data Output
-- CSV and plot files are saved in the top-level `joint_data/` directory in your workspace.
-- Plots include joint states and the 3D gripper trajectory.
+2. Key Files:
+- **robot.urdf.xacro**: Main robot description
+  - Defines physical structure
+  - Includes control and Gazebo configurations
+  - Critical Parameters:
+    - Joint limits
+    - Link dimensions
+    - Inertial properties
+
+- **robot_control.xacro**: Control interface definition
+  ```xml
+  <ros2_control name="RobotSystem" type="system">
+    <joint name="link_1_to_link_2">
+      <!-- Current: Effort Control -->
+      <command_interface name="effort"/>
+      <state_interface name="position"/>
+      <state_interface name="velocity"/>
+      <state_interface name="effort"/>
+      
+      <!-- For Position Control:
+      <command_interface name="position"/>
+      <state_interface name="position"/>
+      -->
+      
+      <!-- For Velocity Control:
+      <command_interface name="velocity"/>
+      <state_interface name="position"/>
+      <state_interface name="velocity"/>
+      -->
+    </joint>
+  </ros2_control>
+  ```
+
+### Available Control Interfaces
+
+1. **Position Control**
+   - Command Interface: `position`
+   - State Interfaces: `position`
+   - Use Case: Precise positioning tasks
+   - Required Changes:
+     - Update URDF command_interface to "position"
+     - Modify controller type to "position_controllers/JointGroupPositionController"
+
+2. **Velocity Control**
+   - Command Interface: `velocity`
+   - State Interfaces: `position`, `velocity`
+   - Use Case: Smooth continuous motion
+   - Required Changes:
+     - Update URDF command_interface to "velocity"
+     - Modify controller type to "velocity_controllers/JointGroupVelocityController"
+
+3. **Effort Control**
+   - Command Interface: `effort`
+   - State Interfaces: `position`, `velocity`, `effort`
+   - Use Case: Force control and compliant motion
+   - Required Changes:
+     - Update URDF command_interface to "effort"
+     - Modify controller type to "effort_controllers/JointGroupEffortController"
+
+### 2. Robot Controller Package
+
+1. Create the package:
+```bash
+ros2 pkg create robot_controller --build-type ament_cmake
+```
+
+2. Key Files:
+- **robot_controllers.yaml**: Controller configuration
+  ```yaml
+  controller_manager:
+    ros__parameters:
+      update_rate: 1000  # Hz
+      arm_controller:
+        type: "forward_command_controller/ForwardCommandController"
+  
+  arm_controller:
+    ros__parameters:
+      joints:
+        - link_1_to_link_2
+        - link_2_to_link_3
+        - link_3_to_link_4
+      interface_name: effort
+  ```
+  Critical: Match interface_name with URDF control interfaces
+
+- **controllers.launch.py**: Controller spawning
+  - Loads controller configurations
+  - Spawns controllers in correct order
+  - Common Pitfall: Ensure joint_state_broadcaster starts first
+
+### 3. Robot Motion Package
+
+1. Create the package:
+```bash
+ros2 pkg create robot_motion --build-type ament_cmake --dependencies rclpy trajectory_msgs
+```
+
+2. Key Files:
+- **trajectory_publisher.py**: Trajectory generation
+  ```python
+  # For effort control
+  self.publisher = self.create_publisher(
+      JointTrajectory, 
+      '/arm_controller/joint_trajectory', 
+      10
+  )
+  ```
+  Important: Match topic names with controller type
+
+## Control Architecture
+
+### Forward Command Controller
+- Direct effort commands
+- No feedback control
+- Simple but requires external feedback
+- Use when: Testing basic movements, implementing custom control loops
+
+### Joint Trajectory Controller
+- Position-based control
+- Built-in trajectory interpolation
+- Feedback control
+- Use when: Smooth trajectory following needed
 
 ## Controller Selection Guide
 
-### For Individual Position, Velocity, and Effort Control
+### Recommended Approach: Joint Trajectory Controller
 
-**Recommended Approach: Joint Trajectory Controller**
+When implementing robot control, the Joint Trajectory Controller is recommended over individual controllers for the following reasons:
 
-When you need to control position, velocity, and effort individually, the **Joint Trajectory Controller** is the recommended choice over using separate individual controllers.
-
-#### Why Joint Trajectory Controller is Better:
-
-1. **Unified Interface**: One controller handles all three control modes
+#### Advantages
+1. **Unified Interface**: One controller handles all control modes
 2. **Flexibility**: Switch between control modes without changing controllers
 3. **Professional Grade**: Industry-standard approach
 4. **MoveIt2 Compatibility**: Works with motion planning frameworks
@@ -111,8 +235,7 @@ When you need to control position, velocity, and effort individually, the **Join
 6. **Online Switching**: Change control modes during operation
 7. **Resource Efficiency**: Single controller vs. three separate ones
 
-#### Recommended Configuration:
-
+#### Configuration Example
 ```yaml
 arm_controller:
   type: joint_trajectory_controller/JointTrajectoryController
@@ -143,653 +266,147 @@ arm_controller:
       goal_time: 0.0
 ```
 
-#### Usage Examples:
+### Controller Types Overview
 
-1. **Position Control**:
-   ```bash
-   ros2 topic pub /arm_controller/commands std_msgs/msg/Float64MultiArray "data: [0.5, 0.3, 0.2]"
-   ```
+#### 1. Basic Controllers
 
-2. **Velocity Control**:
-   ```bash
-   ros2 topic pub /arm_controller/commands std_msgs/msg/Float64MultiArray "data: [0.1, 0.05, 0.02]"
-   ```
-
-3. **Effort Control**:
-   ```bash
-   ros2 topic pub /arm_controller/commands std_msgs/msg/Float64MultiArray "data: [2.0, 1.5, 1.0]"
-   ```
-
-#### Alternative: Individual Controllers (Not Recommended)
-
-```yaml
-# Position controller
-position_controller:
-  type: position_controllers/JointGroupPositionController
-  interface_name: position
-
-# Velocity controller  
-velocity_controller:
-  type: velocity_controllers/JointGroupVelocityController
-  interface_name: velocity
-
-# Effort controller
-effort_controller:
-  type: effort_controllers/JointGroupEffortController
-  interface_name: effort
-```
-
-**Problems with Individual Controllers:**
-- ❌ Resource overhead (three separate controllers)
-- ❌ Coordination issues between control modes
-- ❌ Complex management and switching
-- ❌ Different topics and message types
-- ❌ Limited flexibility for combined control
-
-## ROS 2 Controllers Overview
-
-Based on the [ROS 2 Controllers documentation](https://control.ros.org/jazzy/doc/ros2_controllers/doc/controllers_index.html), this project supports various controller types for different control requirements:
-
-### Individual Control Controllers
-
-#### 1. Position Controllers (`position_controllers/JointGroupPositionController`)
-- **Interface**: `hardware_interface::HW_IF_POSITION`
-- **Purpose**: Direct position control of joints
-- **Command Type**: Single position setpoint per joint
+##### Position Controller
+- **Type**: `position_controllers/JointGroupPositionController`
+- **Purpose**: Direct position control
 - **Use Cases**: 
-  - Precise positioning tasks
+  - Precise positioning
   - Point-to-point movements
   - Static pose maintenance
-- **Advantages**: Simple, direct control
-- **Limitations**: No velocity or acceleration control
+- **Advantages**: Simple implementation
+- **Limitations**: No velocity/acceleration control
 
-#### 2. Velocity Controllers (`velocity_controllers/JointGroupVelocityController`)
-- **Interface**: `hardware_interface::HW_IF_VELOCITY`
-- **Purpose**: Direct velocity control of joints
-- **Command Type**: Single velocity setpoint per joint
+##### Velocity Controller
+- **Type**: `velocity_controllers/JointGroupVelocityController`
+- **Purpose**: Direct velocity control
 - **Use Cases**:
-  - Continuous motion control
+  - Continuous motion
   - Speed regulation
-  - Smooth trajectory following
-- **Advantages**: Smooth motion, good for continuous operation
-- **Limitations**: No position feedback in control loop
+  - Smooth trajectories
+- **Advantages**: Smooth motion
+- **Limitations**: No position feedback
 
-#### 3. Effort Controllers (`effort_controllers/JointGroupEffortController`)
-- **Interface**: `hardware_interface::HW_IF_EFFORT`
+##### Effort Controller
+- **Type**: `effort_controllers/JointGroupEffortController`
 - **Purpose**: Direct torque/force control
-- **Command Type**: Single effort setpoint per joint
 - **Use Cases**:
-  - Force control applications
+  - Force control
   - Compliant motion
   - Impedance control
-- **Advantages**: Direct force control, good for interaction
-- **Limitations**: Requires careful tuning, can be unstable
+- **Advantages**: Direct force control
+- **Limitations**: Requires careful tuning
 
-### Advanced Controllers
+#### 2. Advanced Controllers
 
-#### 4. Joint Trajectory Controller (`joint_trajectory_controller/JointTrajectoryController`)
-- **Purpose**: Comprehensive trajectory execution
-- **Supported Interfaces**: Position, Velocity, Effort
+##### Joint Trajectory Controller
+- **Type**: `joint_trajectory_controller/JointTrajectoryController`
 - **Features**:
-  - Multi-point trajectory execution
-  - Smooth interpolation between waypoints
-  - Online trajectory replacement
-  - Time-based trajectory following
-  - Compatible with MoveIt2
-- **Advantages**: 
-  - Most flexible control option
-  - Supports all control modes
-  - Professional-grade trajectory execution
-- **Use Cases**: Complex motion planning, industrial applications
+  - Multi-point trajectories
+  - Smooth interpolation
+  - Online trajectory updates
+  - MoveIt2 compatible
+- **Use Cases**: Industrial applications
 
-#### 5. PID Controller (`pid_controller/PIDController`)
-- **Purpose**: Proportional-Integral-Derivative control
+##### PID Controller
+- **Type**: `pid_controller/PIDController`
 - **Features**:
-  - Configurable PID gains (Kp, Ki, Kd)
-  - Anti-windup protection
-  - Multiple control modes (position, velocity, effort)
-  - Real-time parameter tuning
-- **Advantages**: 
-  - Precise control with feedback
-  - Handles disturbances well
-  - Industry standard control method
-- **Use Cases**: Precise positioning, disturbance rejection
+  - Configurable gains
+  - Anti-windup
+  - Multiple control modes
+- **Use Cases**: Precise positioning
 
-#### 6. Admittance Controller (`admittance_controller/AdmittanceController`)
-- **Purpose**: Impedance/admittance control for human-robot interaction
+##### Admittance Controller
+- **Type**: `admittance_controller/AdmittanceController`
 - **Features**:
-  - Virtual spring-damper system
-  - Force-based motion control
+  - Force-based control
   - Compliant behavior
-  - Safety-oriented control
-- **Advantages**:
-  - Safe human-robot interaction
-  - Natural force feedback
-  - Adaptive behavior
-- **Use Cases**: Collaborative robotics, force-sensitive tasks
+  - Safety-oriented
+- **Use Cases**: Human-robot interaction
 
-### Broadcasters
+### Usage Examples
 
-#### Joint State Broadcaster (`joint_state_broadcaster/JointStateBroadcaster`)
-- **Purpose**: Publishes joint states to ROS topics
-- **Data Published**: Position, velocity, effort feedback
-- **Topic**: `/joint_states`
-- **Use Cases**: State monitoring, data logging, visualization
-
-## Project Structure
-
-```
-ros_control/
-├── src/
-│   ├── robot_description/           # Robot URDF and simulation setup
-│   │   ├── urdf/                   # Robot description files
-│   │   │   ├── robot.urdf.xacro           # Main robot description
-│   │   │   ├── robot_control.xacro        # ROS 2 Control configuration
-│   │   │   ├── robot_gazebo.xacro         # Gazebo-specific configuration
-│   │   │   └── robot_materials.xacro      # Visual materials definition
-│   │   ├── launch/                 # Simulation launch files
-│   │   │   ├── gazebo.launch.py           # Gazebo simulation launcher
-│   │   │   └── rviz.launch.py             # RViz visualization launcher
-│   │   └── config/                 # Configuration files
-│   │       └── robot.rviz                 # RViz configuration
-│   ├── robot_controller/           # Controller configuration and management
-│   │   ├── config/                 # Controller configurations
-│   │   │   └── robot_controllers.yaml    # Controller parameters
-│   │   └── launch/                 # Controller launch files
-│   │       └── controllers.launch.py     # Controller spawning
-│   └── robot_motion/               # Trajectory generation and data logging
-│       ├── src/                    # Python source code
-│       │   ├── trajectory_publisher.py         # Position-based trajectory generator
-│       │   ├── trajectory_effort_publisher.py  # Effort-based trajectory generator
-│       │   └── plot_joint_data.py              # Data visualization script
-│       └── data/                   # Recorded joint data (CSV files)
-```
-
-## Configuration Files Details
-
-### 1. robot_controllers.yaml
-**Location**: `src/robot_controller/config/robot_controllers.yaml`
-
-**Purpose**: Defines all controller configurations and parameters
-
-**Current Configuration**:
-```yaml
-controller_manager:
-  ros__parameters:
-    update_rate: 1000  # Control loop frequency in Hz
-
-    # Controller definitions
-    arm_controller:
-      type: "forward_command_controller/ForwardCommandController"
-    
-    joint_state_broadcaster:
-      type: joint_state_broadcaster/JointStateBroadcaster
-    
-    gripper_controller:
-      type: forward_command_controller/ForwardCommandController
-
-# Arm controller specific configuration
-arm_controller:
-  ros__parameters:
-    joints:
-      - link_1_to_link_2    # Base joint
-      - link_2_to_link_3    # Middle joint
-      - link_3_to_link_4    # End joint
-    interface_name: effort  # Control interface type
-    open_loop_control: true
-    allow_integration_in_goal_trajectories: true
-
-# Gripper controller configuration
-gripper_controller:
-  ros__parameters:
-    joints:
-      - link_4_to_gripper
-    interface_name: effort
-    open_loop_control: true
-    allow_integration_in_goal_trajectories: true
-```
-
-**Alternative Configurations**:
-
-1. **Position Control Setup**:
-```yaml
-arm_controller:
-  type: position_controllers/JointGroupPositionController
-  interface_name: position
-```
-
-2. **Velocity Control Setup**:
-```yaml
-arm_controller:
-  type: velocity_controllers/JointGroupVelocityController
-  interface_name: velocity
-```
-
-3. **Recommended: Trajectory Control Setup** (for individual position/velocity/effort control):
-```yaml
-arm_controller:
-  type: joint_trajectory_controller/JointTrajectoryController
-  command_interfaces: [position, velocity, effort]
-  state_interfaces: [position, velocity, effort]
-  state_publish_rate: 50.0
-  action_monitor_rate: 20.0
-  allow_partial_joints_goal: true
-```
-
-### 2. controllers.launch.py
-**Location**: `src/robot_controller/launch/controllers.launch.py`
-
-**Purpose**: Manages controller startup sequence and configuration
-
-**Key Features**:
-- Sequential controller spawning
-- Event-based startup coordination
-- Parameter loading from YAML
-- Error handling and recovery
-
-**Launch Sequence**:
-1. Load controller configurations
-2. Start joint_state_broadcaster
-3. Wait for broadcaster to be ready
-4. Start arm_controller and gripper_controller
-
-### 3. gazebo.launch.py
-**Location**: `src/robot_description/launch/gazebo.launch.py`
-
-**Purpose**: Launches Gazebo simulation environment
-
-**Components**:
-- Robot state publisher
-- Gazebo simulation server
-- Robot model spawning
-- ROS 2 - Gazebo bridge
-- Clock synchronization
-
-### 4. robot_control.xacro
-**Location**: `src/robot_description/urdf/robot_control.xacro`
-
-**Purpose**: Defines ROS 2 Control interfaces for each joint
-
-**Interface Configuration**:
-```xml
-<joint name="link_1_to_link_2">
-    <command_interface name="effort"/>
-    <state_interface name="position"/>
-    <state_interface name="velocity"/>
-    <state_interface name="effort"/>
-</joint>
-```
-
-**Supported Interfaces**:
-- Command interfaces: effort (can be extended to position, velocity)
-- State interfaces: position, velocity, effort feedback
-
-### 5. robot_gazebo.xacro
-**Location**: `src/robot_description/urdf/robot_gazebo.xacro`
-
-**Purpose**: Gazebo-specific configuration and plugins
-
-**Key Components**:
-- gz_ros2_control plugin configuration
-- Controller parameter linking
-- Simulation-specific settings
-
-## Motion Generation Scripts
-
-### 1. trajectory_publisher.py
-**Purpose**: Position-based trajectory generation
-- **Update Rate**: 2 Hz
-- **Message Type**: JointTrajectory
-- **Control Mode**: Position-only
-- **Features**: Sinusoidal motion patterns
-
-### 2. trajectory_effort_publisher.py
-**Purpose**: Effort-based trajectory generation with data logging and cartesian coordinate tracking
-- **Update Rate**: 10 Hz
-- **Message Type**: Float64MultiArray
-- **Control Mode**: Effort-only
-- **Features**: 
-  - Real-time effort feedback
-  - CSV data logging with cartesian coordinates
-  - Sinusoidal effort patterns
-  - TF2-based cartesian position tracking
-  - RViz marker visualization
-  - 3D trajectory plotting
-
-**Cartesian Tracking Features**:
-- Tracks `link4_to_gripper` joint position in 3D space
-- Publishes red sphere marker in RViz showing gripper position
-- Logs cartesian coordinates (X, Y, Z) to CSV alongside joint data
-- Real-time position updates at 10 Hz
-- Transform from `base_link` to `gripper_base` frame
-
-### 3. plot_joint_data.py
-**Purpose**: Data visualization and analysis with cartesian trajectory plotting
-- **Input**: CSV files from trajectory_effort_publisher.py
-- **Output**: PNG plots with position, velocity, effort data and 3D cartesian trajectory
-- **Features**:
-  - Multi-subplot visualization (2x2 grid)
-  - Time-series analysis for joint states
-  - 3D cartesian trajectory visualization
-  - Start/end point marking on trajectory
-  - Joint-specific data display
-  - Automatic detection of cartesian data availability
-
-## Cartesian Visualization
-
-### RViz Marker Visualization
-The `trajectory_effort_publisher.py` automatically publishes a red sphere marker showing the current position of the gripper in 3D space.
-
-**To visualize in RViz**:
-1. Launch RViz:
-```bash
-ros2 launch robot_description rviz.launch.py
-```
-
-2. Add the marker display:
-   - In RViz, click "Add" → "By topic" → "/gripper_position_marker"
-   - The red sphere will show the real-time gripper position
-   - The marker updates at 10 Hz during trajectory execution
-
-### 3D Trajectory Plotting
-The enhanced `plot_joint_data.py` script creates comprehensive visualizations including:
-
-1. **Joint State Plots**: Position, velocity, and effort for each joint
-2. **3D Cartesian Trajectory**: Complete path of the gripper in 3D space
-3. **Start/End Markers**: Green circle (start) and red square (end) on trajectory
-
-**Features**:
-- Automatic detection of cartesian data in CSV files
-- 2x2 subplot layout for comprehensive view
-- High-resolution output (300 DPI)
-- Interactive 3D trajectory visualization
-
-## Prerequisites
-
-- ROS 2 Jazzy
-- Gazebo Ignition
-- Python 3.8+
-- Required ROS 2 packages:
-  - ros2_control
-  - ros2_controllers
-  - gz_ros2_control
-  - trajectory_msgs
-  - rclpy
-  - tf2_ros
-  - tf2_ros_py
-  - visualization_msgs
-  - geometry_msgs
-- Python packages:
-  - pandas
-  - matplotlib
-  - numpy
-
-## Installation
-
-1. Clone the repository:
-```bash
-cd ~/ros2_ws/src
-git clone <repository_url>
-```
-
-2. Install dependencies:
-```bash
-rosdep install --from-paths src --ignore-src -r -y
-pip3 install pandas matplotlib
-```
-
-3. Build the workspace:
-```bash
-cd ~/ros2_ws
-colcon build
-```
-
-4. Source the workspace:
-```bash
-source install/setup.bash
-```
-
-## Usage
-
-### Basic Operation
-
-1. Launch Gazebo simulation:
-```bash
-ros2 launch robot_description gazebo.launch.py
-```
-
-2. Start the controllers:
-```bash
-ros2 launch robot_controller controllers.launch.py
-```
-
-3. Run trajectory generation (choose one):
-   
-   Position-based control:
-   ```bash
-   ros2 run robot_motion trajectory_publisher.py
-   ```
-   
-   Effort-based control with data logging:
-   ```bash
-   ros2 run robot_motion trajectory_effort_publisher.py
-   ```
-
-### Monitoring and Visualization
-
-4. Monitor joint states:
-```bash
-ros2 topic echo /joint_states
-```
-
-5. Visualize robot in RViz (optional):
-```bash
-ros2 launch robot_description rviz.launch.py
-```
-Then add the gripper position marker: "Add" → "By topic" → "/gripper_position_marker"
-
-6. Visualize recorded data with cartesian trajectory:
-```bash
-ros2 run robot_motion plot_joint_data.py joint_data/joint_states_YYYYMMDD_HHMMSS.csv
-```
-
-**Enhanced Plot Features**:
-- 2x2 subplot layout showing joint states and 3D trajectory
-- Interactive 3D cartesian trajectory visualization
-- Start (green circle) and end (red square) markers
-- High-resolution output suitable for publications
-
-### Controller Management
-
-7. List active controllers:
-```bash
-ros2 control list_controllers
-```
-
-8. Switch controller types:
-```bash
-ros2 control switch_controllers --start <controller_name> --stop <controller_name>
-```
-
-### Individual Control Commands (with Joint Trajectory Controller)
-
-9. Send position commands:
+1. Position Control:
 ```bash
 ros2 topic pub /arm_controller/commands std_msgs/msg/Float64MultiArray "data: [0.5, 0.3, 0.2]"
 ```
 
-10. Send velocity commands:
+2. Velocity Control:
 ```bash
 ros2 topic pub /arm_controller/commands std_msgs/msg/Float64MultiArray "data: [0.1, 0.05, 0.02]"
 ```
 
-11. Send effort commands:
+3. Effort Control:
 ```bash
 ros2 topic pub /arm_controller/commands std_msgs/msg/Float64MultiArray "data: [2.0, 1.5, 1.0]"
 ```
 
-## Data Logging
+## Common Pitfalls
 
-The system automatically logs joint states and cartesian coordinates to CSV files in the `joint_data/` directory. Each file contains:
-- Timestamp (seconds from start)
-- Position data for each joint (radians)
-- Velocity data for each joint (rad/s)
-- Effort data for each joint (Nm)
-- Cartesian coordinates of gripper (X, Y, Z in meters)
+1. **Interface Mismatch**
+   - Symptom: Controller fails to start
+   - Fix: Ensure URDF and controller config interfaces match
 
-**CSV Column Structure**:
+2. **Controller Spawning Order**
+   - Symptom: Controllers fail to start
+   - Fix: Always spawn joint_state_broadcaster first
+
+3. **Gazebo Integration**
+   - Symptom: Robot doesn't move in simulation
+   - Fix: Check gz_ros2_control plugin parameters
+
+4. **Topic Mismatch**
+   - Symptom: Commands not reaching robot
+   - Fix: Verify controller type and corresponding topics
+
+## Usage Guide
+
+1. Build the workspace:
+```bash
+colcon build
+source install/setup.bash
 ```
-timestamp, link_1_to_link_2_position, link_1_to_link_2_velocity, link_1_to_link_2_effort,
-          link_2_to_link_3_position, link_2_to_link_3_velocity, link_2_to_link_3_effort,
-          link_3_to_link_4_position, link_3_to_link_4_velocity, link_3_to_link_4_effort,
-          gripper_x, gripper_y, gripper_z
+
+2. Launch simulation:
+```bash
+ros2 launch robot_description robot.launch.py
 ```
 
-File naming convention: `joint_states_YYYYMMDD_HHMMSS.csv`
+3. Start controllers:
+```bash
+ros2 launch robot_controller controllers.launch.py
+```
+
+4. Run trajectory generator:
+```bash
+ros2 run robot_motion trajectory_publisher.py
+```
 
 ## Troubleshooting
 
-### Common Issues
+### Controller Issues
+```bash
+# Check controller status
+ros2 control list_controllers
 
-1. **Controller Spawning Failures**:
-   - Check if joint_state_broadcaster is running first
-   - Verify controller configuration matches URDF
-   - Ensure update rates are compatible
+# Check available interfaces
+ros2 control list_hardware_interfaces
 
-2. **Gazebo Simulation Issues**:
-   - Verify all required plugins are installed
-   - Check for URDF/SDF conversion issues
-   - Monitor CPU usage and adjust physics parameters
-
-3. **Motion Control Problems**:
-   - Start with slow, simple movements
-   - Verify joint limits in URDF match controllers
-   - Check for singularities in robot configuration
-
-4. **Data Logging Issues**:
-   - Check file permissions in data directory
-   - Verify CSV file creation in working directory
-   - Monitor disk space for large datasets
-
-### Performance Optimization
-
-1. **Control Rate Tuning**:
-   - Adjust `update_rate` in controller configuration
-   - Balance between performance and accuracy
-   - Monitor CPU usage during operation
-
-2. **Simulation Performance**:
-   - Reduce physics update rate if needed
-   - Use simplified collision models
-   - Adjust Gazebo physics parameters
-
-### Detailed Controller Types and PID Implementation
-
-#### 1. Position Controllers
-- **Controller Type**: Closed-loop PID control
-- **PID Implementation**: 
-  - Full PID control (Proportional, Integral, Derivative)
-  - Error calculated as: e(t) = desired_position - current_position
-  - Control law: u(t) = Kp*e(t) + Ki∫e(t)dt + Kd*de(t)/dt
-- **Feedback**: 
-  - Primary: Position feedback (required)
-  - Optional: Velocity feedback for D term
-- **Use Cases**:
-  - Precise positioning tasks
-  - Point-to-point movements
-  - Applications requiring position holding
-- **Configuration Example**:
-```yaml
-position_controller:
-  type: position_controllers/JointGroupPositionController
-  gains:
-    joint1: {p: 100.0, i: 0.01, d: 10.0}
-    joint2: {p: 100.0, i: 0.01, d: 10.0}
+# Monitor joint states
+ros2 topic echo /joint_states
 ```
 
-#### 2. Velocity Controllers
-- **Controller Type**: Closed-loop PI control
-- **PID Implementation**:
-  - Typically PI control (no D term)
-  - Error calculated as: e(t) = desired_velocity - current_velocity
-  - Control law: u(t) = Kp*e(t) + Ki∫e(t)dt
-- **Feedback**:
-  - Primary: Velocity feedback (required)
-  - No position feedback needed
-- **Use Cases**:
-  - Continuous motion control
-  - Speed regulation
-  - Applications requiring smooth motion
-- **Configuration Example**:
-```yaml
-velocity_controller:
-  type: velocity_controllers/JointGroupVelocityController
-  gains:
-    joint1: {p: 10.0, i: 0.1}
-    joint2: {p: 10.0, i: 0.1}
-```
+### Common Error Messages
+1. "Invalid value set during initialization for parameter 'state_interfaces'"
+   - Cause: Unsupported interface combination
+   - Solution: Check supported interfaces in controller documentation
 
-#### 3. Effort Controllers
-- **Controller Type**: Can be either open-loop or closed-loop
-- **PID Implementation**:
-  - Open-loop: Direct torque/force commands (no PID)
-  - Closed-loop: Full PID based on position or velocity error
-- **Feedback**:
-  - Open-loop: No feedback required
-  - Closed-loop: Position, velocity, and effort feedback
-- **Use Cases**:
-  - Direct torque/force control
-  - Compliant motion control
-  - Force-based interactions
-- **Configuration Example**:
-```yaml
-# Open-loop effort controller (current project configuration)
-effort_controller:
-  type: effort_controllers/JointGroupEffortController
-  interface_name: effort
-  open_loop_control: true
-
-# Closed-loop effort controller with PID
-effort_controller:
-  type: effort_controllers/JointGroupEffortController
-  gains:
-    joint1: {p: 1000.0, i: 100.0, d: 10.0}
-    joint2: {p: 1000.0, i: 100.0, d: 10.0}
-```
-
-#### Current Project Configuration
-The project currently uses a Forward Command Controller:
-```yaml
-arm_controller:
-  type: forward_command_controller/ForwardCommandController
-  interface_name: effort
-  open_loop_control: true
-```
-This is an open-loop effort controller that:
-- Directly forwards effort commands to the joints
-- Does not implement PID control
-- Suitable for testing and development
-- Requires external feedback control if precise positioning is needed
-
-#### PID Control Recommendations
-1. **For Precise Positioning**:
-   - Use Position Controllers with PID
-   - Tune Kp for quick response
-   - Add Ki for steady-state error elimination
-   - Use Kd for damping oscillations
-
-2. **For Smooth Motion**:
-   - Use Velocity Controllers with PI
-   - Focus on Kp for response speed
-   - Minimal Ki for drift compensation
-   - Avoid Kd to prevent noise amplification
-
-3. **For Force Control**:
-   - Start with open-loop effort control for testing
-   - Add PID for precise force regulation
-   - Use lower gains for compliance
-   - Consider admittance control for human interaction 
-
+2. "Could not initialize the controller"
+   - Cause: Interface mismatch or missing dependencies
+   - Solution: Verify URDF and controller configuration match
 
 ## License
 
