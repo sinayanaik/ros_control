@@ -2,6 +2,9 @@
 
 import rclpy
 from rclpy.node import Node
+from rclpy.duration import Duration
+from rclpy.time import Time
+from rclpy.qos import QoSProfile, ReliabilityPolicy, DurabilityPolicy
 from std_msgs.msg import Float64MultiArray
 from sensor_msgs.msg import JointState
 import math
@@ -14,9 +17,9 @@ import os
 import signal
 import sys
 from pathlib import Path
-from visualization_msgs.msg import Marker
+from visualization_msgs.msg import Marker, MarkerArray
 import tf2_ros
-from geometry_msgs.msg import TransformStamped
+from geometry_msgs.msg import TransformStamped, Point
 
 class JointPositionPublisher(Node):
     def __init__(self):
@@ -29,11 +32,15 @@ class JointPositionPublisher(Node):
             10
         )
         
-        # Create marker publisher
+        # Create marker publisher with reliable QoS
         self.marker_pub = self.create_publisher(
-            Marker,
-            '/visualization_marker',
-            10
+            MarkerArray,
+            '/visualization_marker_array',
+            QoSProfile(
+                depth=10,
+                reliability=ReliabilityPolicy.RELIABLE,
+                durability=DurabilityPolicy.TRANSIENT_LOCAL
+            )
         )
         
         # Subscribe to joint states
@@ -51,7 +58,7 @@ class JointPositionPublisher(Node):
             'link_3_to_link_4'
         ]
         
-        # Data storage
+        # Data storage for plotting
         self.data = {
             'timestamp': [],
             'desired_positions': [],
@@ -65,62 +72,96 @@ class JointPositionPublisher(Node):
         
         # Joint state data
         self.latest_joint_state = None
+        self.latest_end_effector_pos = None
         
-        # Create timer (2 Hz update rate)
-        self.timer = self.create_timer(0.5, self.timer_callback)
+        # Create TF buffer with a longer cache time
+        self.tf_buffer = tf2_ros.Buffer(cache_time=Duration(seconds=10.0))
+        self.tf_listener = tf2_ros.TransformListener(self.tf_buffer, self)
+        
+        # Create timers (2 Hz for commands, 100 Hz for markers)
+        self.command_timer = self.create_timer(0.5, self.command_timer_callback)
+        self.marker_timer = self.create_timer(0.01, self.marker_timer_callback)  # 100 Hz for smoother visualization
+        
         self.start_time = time.time()
         self.get_logger().info('Enhanced position publisher started')
         
         # Setup signal handler for Ctrl+C
         signal.signal(signal.SIGINT, self.signal_handler)
         
-        self.tf_buffer = tf2_ros.Buffer()
-        self.tf_listener = tf2_ros.TransformListener(self.tf_buffer, self)
+        # Store past positions with timestamps for trail effect
+        self.ee_past_positions = []  # Store (Point, timestamp)
+        self.marker_array = MarkerArray()
+        self.next_marker_id = 0
         
+        # Configuration for visualization
+        self.TRAIL_DURATION = 5.0  # Trail duration in seconds
+        self.MARKER_SIZE = 0.015   # Smaller markers for denser trail
+        
+        # Debug counter for transform availability
+        self.transform_check_counter = 0
+        self.transform_check_interval = 100  # Log every 100 attempts
+
+    def get_end_effector_position(self):
+        """Get the current end effector position from TF"""
+        try:
+            transform = self.tf_buffer.lookup_transform(
+                'base_link',
+                'gripper_base',  # Track the gripper base frame
+                Time(),
+                Duration(seconds=0.05)  # Shorter timeout for higher frequency
+            )
+            
+            # Create point from transform
+            pt = Point()
+            pt.x = transform.transform.translation.x
+            pt.y = transform.transform.translation.y
+            pt.z = transform.transform.translation.z
+            
+            self.latest_end_effector_pos = pt
+            return pt
+            
+        except (tf2_ros.LookupException, tf2_ros.ConnectivityException, 
+               tf2_ros.ExtrapolationException) as e:
+            self.transform_check_counter += 1
+            if self.transform_check_counter % self.transform_check_interval == 0:
+                self.get_logger().warn(f'Transform error: {str(e)}')
+                # Log available frames for debugging
+                frames = self.tf_buffer.all_frames_as_string()
+                self.get_logger().info(f'Available frames:\n{frames}')
+            return None
+
     def joint_state_callback(self, msg):
         """Callback to receive joint state data"""
         self.latest_joint_state = msg
-        
-    def forward_kinematics(self, joint_positions):
-        """Corrected forward kinematics for 3-DOF planar robot arm in XZ plane (Y is always 0)"""
-        l1, l2, l3 = 0.25, 0.15, 0.15  # Link lengths l1 = vertical offset
-        l4 = 0.10  
-        theta1, theta2, theta3 = joint_positions
-        # Planar XZ kinematics (rotation about Y)
-        x = l2 * math.sin(theta1) + l3 * math.sin(theta1 + theta2) + l4 * math.sin(theta1 + theta2 + theta3)
-        z = l1 + l2 * math.cos(theta1) + l3 * math.cos(theta1 + theta2) + l4 * math.cos(theta1 + theta2 + theta3)
-        y = 0.0
-        return x, y, z
-        
-    def timer_callback(self):
-        # Calculate desired positions (simple oscillation)
+
+    def command_timer_callback(self):
+        """Timer callback for sending joint commands"""
         t = time.time() - self.start_time
         desired_positions = [
-            0.7 * math.sin(0.25 * t),  # link_1_to_link_2
-            0.5 * math.sin(0.35 * t),  # link_2_to_link_3
-            0.3 * math.sin(0.3 * t)    # link_3_to_link_4
+            0.7 * math.sin(1 * t),  # link_1_to_link_2
+            0.5 * math.cos(0.5 * t),  # link_2_to_link_3
+            0.3 * math.sin(0.25 * t)    # link_3_to_link_4
         ]
         
-        # Create and publish command message
         msg = Float64MultiArray()
         msg.data = desired_positions
         self.position_pub.publish(msg)
         
-        # Calculate end effector position from desired joint positions
-        end_x, end_y, end_z = self.forward_kinematics(desired_positions)
+        # Get current end effector position
+        ee_pos = self.get_end_effector_position()
         
-        # Get current timestamp
-        current_time = t
-        
-        # Store desired data
-        self.data['timestamp'].append(current_time)
-        self.data['desired_positions'].append(desired_positions.copy())
-        self.data['end_effector_x'].append(end_x)
-        self.data['end_effector_y'].append(end_y)
-        self.data['end_effector_z'].append(end_z)
-        
-        # Store actual data if available
-        if self.latest_joint_state is not None:
+        # Only store data if we have both joint states and end effector position
+        if self.latest_joint_state is not None and ee_pos is not None:
+            # Store timestamp and desired positions
+            self.data['timestamp'].append(t)
+            self.data['desired_positions'].append(desired_positions)
+            
+            # Store end effector position
+            self.data['end_effector_x'].append(ee_pos.x)
+            self.data['end_effector_y'].append(ee_pos.y)
+            self.data['end_effector_z'].append(ee_pos.z)
+            
+            # Store joint states
             actual_positions = []
             velocities = []
             efforts = []
@@ -132,24 +173,90 @@ class JointPositionPublisher(Node):
                     velocities.append(self.latest_joint_state.velocity[idx])
                     efforts.append(self.latest_joint_state.effort[idx])
                 except ValueError:
-                    # Joint not found, use default values
                     actual_positions.append(0.0)
                     velocities.append(0.0)
                     efforts.append(0.0)
-        else:
-            # No joint state data yet
-            actual_positions = [0.0, 0.0, 0.0]
-            velocities = [0.0, 0.0, 0.0]
-            efforts = [0.0, 0.0, 0.0]
-        
-        self.data['actual_positions'].append(actual_positions)
-        self.data['velocities'].append(velocities)
-        self.data['efforts'].append(efforts)
-        
-        self.publish_marker_from_tf()
-        
-        self.get_logger().info(f'Sent positions: {desired_positions}')
-        
+            
+            self.data['actual_positions'].append(actual_positions)
+            self.data['velocities'].append(velocities)
+            self.data['efforts'].append(efforts)
+
+    def marker_timer_callback(self):
+        """High-frequency timer callback for smooth marker updates"""
+        try:
+            now = self.get_clock().now()
+            ee_pos = self.get_end_effector_position()
+            
+            if ee_pos is None:
+                return
+                
+            # Add new position to history with timestamp
+            self.ee_past_positions.append((ee_pos, now.nanoseconds))
+            
+            # Remove positions older than TRAIL_DURATION seconds
+            current_time = now.nanoseconds
+            self.ee_past_positions = [(p, t) for p, t in self.ee_past_positions 
+                                    if (current_time - t) < self.TRAIL_DURATION * 1e9]
+            
+            # Create marker array for trail visualization
+            marker_array = MarkerArray()
+            
+            # Add markers for trail
+            for i, (past_pt, ts) in enumerate(self.ee_past_positions):
+                marker = Marker()
+                marker.header.frame_id = "base_link"
+                marker.header.stamp = now.to_msg()
+                marker.ns = "end_effector_trail"
+                marker.id = i
+                marker.type = Marker.SPHERE
+                marker.action = Marker.ADD
+                
+                # Set position
+                marker.pose.position = past_pt
+                marker.pose.orientation.w = 1.0
+                
+                # Set size (small spheres)
+                marker.scale.x = self.MARKER_SIZE
+                marker.scale.y = self.MARKER_SIZE
+                marker.scale.z = self.MARKER_SIZE
+                
+                # Set color (red for current position, blue for trail)
+                if i == len(self.ee_past_positions) - 1:
+                    marker.color.r = 1.0
+                    marker.color.g = 0.0
+                    marker.color.b = 0.0
+                    marker.color.a = 1.0
+                else:
+                    # Fade from blue to transparent based on age
+                    age_factor = 1.0 - (current_time - ts) / (self.TRAIL_DURATION * 1e9)
+                    marker.color.r = 0.0
+                    marker.color.g = 0.7
+                    marker.color.b = 1.0
+                    marker.color.a = 0.8 * age_factor
+                
+                # Set lifetime
+                marker.lifetime = Duration(seconds=self.TRAIL_DURATION).to_msg()
+                
+                marker_array.markers.append(marker)
+            
+            # Delete old markers
+            if len(marker_array.markers) < len(self.marker_array.markers):
+                for i in range(len(marker_array.markers), len(self.marker_array.markers)):
+                    delete_marker = Marker()
+                    delete_marker.header.frame_id = "base_link"
+                    delete_marker.header.stamp = now.to_msg()
+                    delete_marker.ns = "end_effector_trail"
+                    delete_marker.id = i
+                    delete_marker.action = Marker.DELETE
+                    marker_array.markers.append(delete_marker)
+            
+            # Update marker array and publish
+            self.marker_array = marker_array
+            self.marker_pub.publish(marker_array)
+
+        except Exception as e:
+            self.get_logger().error(f'Marker error: {str(e)}')
+
     def signal_handler(self, signum, frame):
         """Handle Ctrl+C signal"""
         self.get_logger().info('Received interrupt signal. Saving data and creating plots...')
@@ -158,74 +265,90 @@ class JointPositionPublisher(Node):
         
     def save_data_and_plot(self):
         """Save data to CSV and create plots"""
+        self.get_logger().info('Saving data and creating plots...')
+        
         # Create test_datas directory in workspace
         workspace_root = Path(__file__).resolve().parents[4]  # Go up to workspace root
         test_datas_dir = workspace_root / 'test_datas'
         test_datas_dir.mkdir(exist_ok=True)
         
-        # Prepare data for CSV
-        csv_data = []
-        for i in range(len(self.data['timestamp'])):
-            row = {
-                'timestamp': self.data['timestamp'][i],
-                'desired_joint1': self.data['desired_positions'][i][0],
-                'desired_joint2': self.data['desired_positions'][i][1],
-                'desired_joint3': self.data['desired_positions'][i][2],
-                'actual_joint1': self.data['actual_positions'][i][0],
-                'actual_joint2': self.data['actual_positions'][i][1],
-                'actual_joint3': self.data['actual_positions'][i][2],
-                'velocity_joint1': self.data['velocities'][i][0],
-                'velocity_joint2': self.data['velocities'][i][1],
-                'velocity_joint3': self.data['velocities'][i][2],
-                'effort_joint1': self.data['efforts'][i][0],
-                'effort_joint2': self.data['efforts'][i][1],
-                'effort_joint3': self.data['efforts'][i][2],
-                'end_effector_x': self.data['end_effector_x'][i],
-                'end_effector_y': self.data['end_effector_y'][i],
-                'end_effector_z': self.data['end_effector_z'][i]
-            }
-            csv_data.append(row)
+        # Convert data to DataFrame
+        df = pd.DataFrame({
+            'timestamp': self.data['timestamp'],
+            'desired_joint1': [pos[0] for pos in self.data['desired_positions']],
+            'desired_joint2': [pos[1] for pos in self.data['desired_positions']],
+            'desired_joint3': [pos[2] for pos in self.data['desired_positions']],
+            'actual_joint1': [pos[0] for pos in self.data['actual_positions']],
+            'actual_joint2': [pos[1] for pos in self.data['actual_positions']],
+            'actual_joint3': [pos[2] for pos in self.data['actual_positions']],
+            'velocity_joint1': [vel[0] for vel in self.data['velocities']],
+            'velocity_joint2': [vel[1] for vel in self.data['velocities']],
+            'velocity_joint3': [vel[2] for vel in self.data['velocities']],
+            'effort_joint1': [eff[0] for eff in self.data['efforts']],
+            'effort_joint2': [eff[1] for eff in self.data['efforts']],
+            'effort_joint3': [eff[2] for eff in self.data['efforts']],
+            'end_effector_x': self.data['end_effector_x'],
+            'end_effector_y': self.data['end_effector_y'],
+            'end_effector_z': self.data['end_effector_z']
+        })
         
         # Save to CSV
-        df = pd.DataFrame(csv_data)
-        csv_file = test_datas_dir / f'robot_data_{int(time.time())}.csv'
+        timestamp = int(time.time())
+        csv_file = test_datas_dir / f'robot_data_{timestamp}.csv'
         df.to_csv(csv_file, index=False)
         self.get_logger().info(f'Data saved to: {csv_file}')
         
         # Create plots
-        self.create_plots(df, test_datas_dir)
+        self.create_plots(df, test_datas_dir, timestamp)
         
-    def create_plots(self, df, output_dir):
-        """Create three separate plot windows (corrected for XZ plane)"""
+    def create_plots(self, df, output_dir, timestamp):
+        """Create three separate plot windows"""
         # Plot 1: End effector coordinates (3D and 2D)
         fig1 = plt.figure(figsize=(15, 6))
-        # 3D plot (X, Z, Y)
+        
+        # 3D trajectory
         ax1_3d = fig1.add_subplot(121, projection='3d')
-        ax1_3d.plot(df['end_effector_x'], df['end_effector_z'], df['end_effector_y'],
-                    color='b', linewidth=2, label='End Effector Path')
-        ax1_3d.scatter(df['end_effector_x'].iloc[0], df['end_effector_z'].iloc[0], df['end_effector_y'].iloc[0],
+        ax1_3d.plot(df['end_effector_x'], df['end_effector_y'], df['end_effector_z'],
+                    'b-', linewidth=2, label='End Effector Path')
+        ax1_3d.scatter(df['end_effector_x'].iloc[0], df['end_effector_y'].iloc[0], df['end_effector_z'].iloc[0],
                        color='green', s=100, label='Start', marker='o')
-        ax1_3d.scatter(df['end_effector_x'].iloc[-1], df['end_effector_z'].iloc[-1], df['end_effector_y'].iloc[-1],
+        ax1_3d.scatter(df['end_effector_x'].iloc[-1], df['end_effector_y'].iloc[-1], df['end_effector_z'].iloc[-1],
                        color='red', s=100, label='End', marker='s')
         ax1_3d.set_xlabel('X (m)')
-        ax1_3d.set_ylabel('Z (m)')
-        ax1_3d.set_zlabel('Y (m)')
-        ax1_3d.set_title('End Effector 3D Trajectory (XZ plane)')
+        ax1_3d.set_ylabel('Y (m)')
+        ax1_3d.set_zlabel('Z (m)')
+        ax1_3d.set_title('End Effector 3D Trajectory')
         ax1_3d.legend()
         ax1_3d.grid(True)
-        # 2D plot (X and Z over time)
+        
+        # Set equal aspect ratio for 3D plot
+        max_range = np.array([
+            df['end_effector_x'].max() - df['end_effector_x'].min(),
+            df['end_effector_y'].max() - df['end_effector_y'].min(),
+            df['end_effector_z'].max() - df['end_effector_z'].min()
+        ]).max() / 2.0
+        
+        mean_x = df['end_effector_x'].mean()
+        mean_y = df['end_effector_y'].mean()
+        mean_z = df['end_effector_z'].mean()
+        ax1_3d.set_xlim(mean_x - max_range, mean_x + max_range)
+        ax1_3d.set_ylim(mean_y - max_range, mean_y + max_range)
+        ax1_3d.set_zlim(mean_z - max_range, mean_z + max_range)
+        
+        # 2D coordinates over time
         ax1_2d = fig1.add_subplot(122)
         ax1_2d.plot(df['timestamp'], df['end_effector_x'], 'r-', label='X', linewidth=2)
+        ax1_2d.plot(df['timestamp'], df['end_effector_y'], 'g-', label='Y', linewidth=2)
         ax1_2d.plot(df['timestamp'], df['end_effector_z'], 'b-', label='Z', linewidth=2)
         ax1_2d.set_xlabel('Time (s)')
         ax1_2d.set_ylabel('Position (m)')
-        ax1_2d.set_title('End Effector X/Z Coordinates vs Time')
+        ax1_2d.set_title('End Effector Coordinates vs Time')
         ax1_2d.legend()
         ax1_2d.grid(True)
+        
         plt.tight_layout()
-        plot1_file = output_dir / 'end_effector_trajectory.png'
-        plt.savefig(plot1_file, dpi=300, bbox_inches='tight')
-        plt.show()
+        plot1_file = output_dir / f'end_effector_trajectory_{timestamp}.png'
+        plt.savefig(plot1_file)
         
         # Plot 2: Desired vs Actual joint positions and errors
         fig2, axes = plt.subplots(3, 1, figsize=(12, 10))
@@ -249,9 +372,8 @@ class JointPositionPublisher(Node):
             ax.grid(True)
         
         plt.tight_layout()
-        plot2_file = output_dir / 'joint_positions_comparison.png'
-        plt.savefig(plot2_file, dpi=300, bbox_inches='tight')
-        plt.show()
+        plot2_file = output_dir / f'joint_positions_comparison_{timestamp}.png'
+        plt.savefig(plot2_file)
         
         # Plot 3: Position, velocity, and effort over time
         fig3, axes = plt.subplots(3, 3, figsize=(15, 12))
@@ -286,58 +408,13 @@ class JointPositionPublisher(Node):
             ax_eff.grid(True)
         
         plt.tight_layout()
-        plot3_file = output_dir / 'joint_states_detailed.png'
-        plt.savefig(plot3_file, dpi=300, bbox_inches='tight')
+        plot3_file = output_dir / f'joint_states_detailed_{timestamp}.png'
+        plt.savefig(plot3_file)
+        
+        # Show all plots
         plt.show()
         
         self.get_logger().info(f'Plots saved to: {output_dir}')
-
-    def publish_marker_from_tf(self):
-        try:
-            # Look up transform from base_link to gripper_base
-            tf: TransformStamped = self.tf_buffer.lookup_transform(
-                'base_link',
-                'gripper_base',
-                rclpy.time.Time(),
-                rclpy.duration.Duration(seconds=1.0)  # Add timeout
-            )
-            
-            # Create and publish marker
-            marker = Marker()
-            marker.header.frame_id = "base_link"
-            marker.header.stamp = self.get_clock().now().to_msg()
-            marker.ns = "end_effector"
-            marker.id = 0
-            marker.type = Marker.SPHERE
-            marker.action = Marker.ADD
-            
-            # Set position from transform
-            marker.pose.position.x = tf.transform.translation.x
-            marker.pose.position.y = tf.transform.translation.y
-            marker.pose.position.z = tf.transform.translation.z
-            
-            # Set orientation from transform
-            marker.pose.orientation = tf.transform.rotation
-            
-            # Set marker properties
-            marker.scale.x = 0.04
-            marker.scale.y = 0.04
-            marker.scale.z = 0.04
-            marker.color.r = 0.2
-            marker.color.g = 0.8
-            marker.color.b = 0.2
-            marker.color.a = 1.0
-            marker.lifetime.sec = 3
-            marker.lifetime.nanosec = 0
-            
-            self.marker_pub.publish(marker)
-            
-        except tf2_ros.LookupException as e:
-            self.get_logger().debug(f'Transform not available yet: {str(e)}')
-        except tf2_ros.ExtrapolationException as e:
-            self.get_logger().debug(f'Transform extrapolation failed: {str(e)}')
-        except Exception as e:
-            self.get_logger().error(f'Error publishing marker: {str(e)}')
 
 def main():
     rclpy.init()

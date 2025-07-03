@@ -119,19 +119,66 @@ This project implements a **3-DOF planar robot arm with a gripper** using ROS 2,
   ```
 
 ### send_position.py (Motion Publisher & Logger)
-- Publishes to `/arm_controller/commands` (Float64MultiArray)
-- Subscribes to `/joint_states` (JointState)
-- Tracks and logs:
-  - Desired and actual joint positions
-  - Joint velocities and efforts
-  - End-effector X, Z (and Y=0)
-- On exit (Ctrl+C):
-  - Saves all data to `/test_datas/robot_data_<timestamp>.csv`
-  - Plots:
-    - 3D XZ trajectory (Y=0)
-    - X/Z vs time
-    - Desired vs actual joint positions and errors
-    - Position, velocity, effort for each joint
+- **ROS Topics:**
+  - **Publishers:**
+    - `/arm_controller/commands` (Float64MultiArray): Sends desired joint positions
+    - `/visualization_marker_array` (MarkerArray): Real-time end-effector trail visualization
+  - **Subscribers:**
+    - `/joint_states` (JointState): Receives actual joint states
+  - **TF Lookups:**
+    - Monitors transform from 'base_link' to 'gripper_base' for end-effector position
+
+- **Data Collection (100Hz):**
+  - Synchronized storage of:
+    - Timestamps (relative to start)
+    - Desired joint positions (from command generation)
+    - Actual joint positions (from /joint_states)
+    - Joint velocities (from /joint_states)
+    - Joint efforts (from /joint_states)
+    - End-effector position (from TF transform)
+
+- **CSV File Structure (`/test_datas/robot_data_<timestamp>.csv`):**
+  | Column | Source | Description |
+  |--------|--------|-------------|
+  | timestamp | time.time() - start_time | Elapsed time in seconds |
+  | desired_joint[1-3] | Command generator | Desired position for each joint |
+  | actual_joint[1-3] | /joint_states topic | Measured position for each joint |
+  | velocity_joint[1-3] | /joint_states topic | Measured velocity for each joint |
+  | effort_joint[1-3] | /joint_states topic | Measured effort for each joint |
+  | end_effector_[x,y,z] | TF transform | End-effector position from base_link |
+
+- **Real-time Visualization:**
+  - End-effector trail using marker array:
+    - Red sphere: Current position
+    - Blue spheres: Past positions (5-second trail)
+    - Markers update at 100Hz for smooth visualization
+    - Auto-cleanup of old markers
+
+- **Generated Plots:**
+  1. **End-Effector Trajectory Plot:**
+     - Left: 3D trajectory with start (green) and end (red) points
+     - Right: X, Y, Z coordinates vs time
+     - Equal aspect ratio for true spatial visualization
+  2. **Joint Position Comparison:**
+     - Three subplots (one per joint)
+     - Shows desired (blue), actual (red), and error (green)
+     - Helps identify tracking performance
+  3. **Joint States Analysis:**
+     - 3x3 grid showing:
+       - Position (desired vs actual)
+       - Velocity profile
+       - Effort requirements
+     - Useful for controller tuning and performance analysis
+
+- **Data Synchronization:**
+  - Only stores complete data points when both joint states and end-effector position are available
+  - Prevents data misalignment in plots and CSV
+  - Uses high-frequency transform lookups (100Hz) for smooth tracking
+
+- **Error Handling:**
+  - Graceful handling of transform lookup failures
+  - Periodic logging of available TF frames for debugging
+  - Proper cleanup of visualization markers
 
 ### robot_controllers.yaml (Controller Config)
 - `arm_controller` for 3 actuated joints
